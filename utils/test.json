@@ -1,0 +1,48 @@
+{
+    "count": 1511,
+    "next": "http://127.0.0.1:8989/draw-result/winners/?created_at__gte=2025-10-31&limit=10&offset=10",
+    "previous": null,
+    "results": {
+      "data": [
+        {
+          "customer_name": "",
+          "bill_number": 33301,
+          "prize": 30.0,
+          "win_number": "908",
+          "count": "1",
+          "lsk": "LSK SUPER",
+          "draw": "DEAR 6 PM",
+          "dealer": {
+            "id": 58,
+            "username": "Navas",
+            "user_type": "DEALER",
+            "commission": 1.5,
+            "single_digit_number_commission": 1.0,
+            "cap_amount": 10000000.0
+          },
+          "agent": null,
+          "booking_datetime": "2025-11-01T17:30:54.225984+05:30"
+        },
+        {
+          "customer_name": "",
+          "bill_number": 33308,
+          "prize": 90.0,
+          "win_number": "004",
+          "count": "3",
+          "lsk": "LSK SUPER",
+          "draw": "DEAR 6 PM",
+          "dealer": {
+            "id": 67,
+            "username": "abukka",
+            "user_type": "DEALER",
+            "commission": 2.0,
+            "single_digit_number_commission": 1.0,
+            "cap_amount": 1000000.0
+          },
+          "agent": null,
+          "booking_datetime": "2025-11-01T17:34:41.052157+05:30"
+        }
+      ],
+      "total_winning_prize": 2001130.0
+    }
+  }

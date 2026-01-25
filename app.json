@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "calculator",
+    "slug": "gcc-agent",
+    "version": "1.0.0",
+    "scheme": "gcc-agent",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-splash-screen",
+      "expo-web-browser",
+      "react-native-edge-to-edge"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f9fa668c-9be4-410a-a81f-116c0b81deae"
+      }
+    },
+    "android": {
+      "package": "com.luckybh.gcc.agent",
+      "icon": "./assets/images/agent-appicon.png"
+    },
+    "icon": "./assets/images/agent-appicon.png"
+  }
+}
