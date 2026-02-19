@@ -25,6 +25,8 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="gcc-agent"/>
+        <data android:scheme="gcc-admin"/>
+        <data android:scheme="gcc-dealer"/>
       </intent-filter>
     </activity>
   </application>
