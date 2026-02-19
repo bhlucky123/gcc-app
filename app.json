@@ -1,9 +1,9 @@
 {
   "expo": {
     "name": "calculator",
-    "slug": "gcc-agent",
+    "slug": "gcc-dealer",
     "version": "1.0.0",
-    "scheme": "gcc-agent",
+    "scheme": "gcc-dealer",
     "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
     "web": {
@@ -32,9 +32,9 @@
       }
     },
     "android": {
-      "package": "com.luckybh.gcc.agent",
-      "icon": "./assets/images/agent-appicon.png"
+      "package": "com.luckybh.gcc.dealer",
+      "icon": "./assets/images/dealer-appicon.png"
     },
-    "icon": "./assets/images/agent-appicon.png"
+    "icon": "./assets/images/dealer-appicon.png"
   }
 }

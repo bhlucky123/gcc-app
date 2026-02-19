@@ -11,12 +11,14 @@ const api = axios.create({
   },
 });
 
-// Request interceptor
+// Request interceptor (logs time start)
 api.interceptors.request.use(
   async (config) => {
     // Grab token from Zustand store
     const token = useAuthStore.getState().token;
 
+    // Mark request start time
+    (config as any).metadata = { startTime: Date.now() };
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -27,18 +29,32 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor (optional)
+// Response interceptor (logs time taken)
 api.interceptors.response.use(
-  // (response) => response,
   (response) => {
-    // console.log("response", response);
+    // Calculate and log elapsed time
+    const metadata = (response.config as any).metadata;
+    if (metadata && metadata.startTime) {
+      const duration = Date.now() - metadata.startTime;
+      console.log(
+        `[Axios] ${response.config.method?.toUpperCase()} ${response.config.url} took ${duration}ms`
+      );
+    }
+
     if (response.status === 204) {
-      // Return a custom empty object or message if needed
       return { ...response, data: null };
     }
     return response;
   },
   (error) => {
+    // Log time for failed requests too
+    if (error.config && (error.config as any).metadata && (error.config as any).metadata.startTime) {
+      const duration = Date.now() - (error.config as any).metadata.startTime;
+      console.log(
+        `[Axios] ${error.config.method?.toUpperCase()} ${error.config.url} errored after ${duration}ms`
+      );
+    }
+
     console.log("error", error);
     console.log("Raw error:", error);
 
@@ -48,7 +64,6 @@ api.interceptors.response.use(
       error.request._response.includes("HTTP 204 had non-zero Content-Length")
     ) {
       console.warn("⚠️ Fixing malformed 204 No Content response...");
-      
       return Promise.resolve({
         status: 204,
         statusText: "No Content",
@@ -66,21 +81,14 @@ api.interceptors.response.use(
       const { status, data } = error.response;
       console.log("❌ Axios Error:", status, data);
 
-      
-
       if (status === 503) {
         console.log("naivigating due to inative", status);
         router.push("..")
         return
       }
 
-
       if (status === 401) {
-        if(config.userType === "ADMIN"){
-          router.push("/login")
-        }else{
-        router.push("..")
-        }
+        router.push("/login")
         return
       }
       return Promise.reject({ status: status || 500, message: data || "something went wrong" });
@@ -89,7 +97,6 @@ api.interceptors.response.use(
       console.error("❌ Network or config error", error);
       return Promise.reject(error);
     }
-
   }
 );
 

@@ -910,7 +910,7 @@ const BookingScreen: React.FC = () => {
     }
     if (DrawSessionDetails?.session?.active_session_id) {
       let bookedAgent = null;
-       let booked_dealer = null;
+      let booked_dealer = null;
       if (selectedDealer) {
         booked_dealer = Number(selectedDealer);
       }
@@ -922,7 +922,7 @@ const BookingScreen: React.FC = () => {
         customer_name: customerName,
         draw_session: DrawSessionDetails?.session?.active_session_id,
         booked_agent: bookedAgent,
-        booked_dealer: booked_dealer,
+        booked_dealer: user?.user_type === "ADMIN" ? booked_dealer : undefined,
         booking_details: bookingDetails.map(
           ({ number, count, type, sub_type }) => ({
             number,
@@ -1701,6 +1701,12 @@ const BookingScreen: React.FC = () => {
     router.push("/(tabs)");
   }
 
+  useEffect(() => {
+    if (user?.user_type === "DEALER") {
+      setSelectedDealer(user?.id);
+    }
+  }, [])
+
   return (
     <SafeAreaView className="flex-1">
       <KeyboardAvoidingView
@@ -1760,10 +1766,10 @@ const BookingScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {
-            user?.user_type === "ADMIN" && (
-              <View className="flex flex-row gap-3">
 
+          <View className="flex flex-row gap-3">
+            {
+              user?.user_type === "ADMIN" && (
                 <View className="mb-2 flex-1">
                   <Dropdown
                     data={dealers.map((dealer) => ({
@@ -1815,64 +1821,64 @@ const BookingScreen: React.FC = () => {
                     }
                   />
                 </View>
+              )}
 
-                {selectedDealer && (
-                  <View className="mb-2 flex-1">
-                    <Dropdown
-                      data={agents.map((agent) => ({
-                        label: agent.username,
-                        value: agent.id,
-                      }))}
-                      labelField="label"
-                      valueField="value"
-                      value={selectedAgent}
-                      onChange={item => {
-                        setSelectedAgent(item.value)
-                      }}
-                      placeholder="Select Agent"
-                      style={{
-                        borderColor: "#9ca3af",
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        paddingHorizontal: 8,
-                        padding: 10
-                      }}
-                      containerStyle={{
-                        borderRadius: 6,
-                      }}
-                      itemTextStyle={{
-                        color: "#000",
-                      }}
-                      selectedTextStyle={{
-                        color: "#000",
-                      }}
-                      renderRightIcon={() =>
-                        selectedAgent ? (
-                          <TouchableOpacity
-                            onPress={() => setSelectedAgent("")}
-                            style={{
-                              position: "absolute",
-                              right: 10,
-                              zIndex: 10,
-                              // backgroundColor: "#fff",
-                              width: 24,
-                              height: 24,
-                              alignItems: "center",
-                              justifyContent: "center",
-                              borderRadius: 12,
+            {(selectedDealer || user?.user_type === "ADMIN" || user?.user_type === "DEALER") && (
+              <View className="mb-2 flex-1">
+                <Dropdown
+                  data={agents.map((agent) => ({
+                    label: agent.username,
+                    value: agent.id,
+                  }))}
+                  labelField="label"
+                  valueField="value"
+                  value={selectedAgent}
+                  onChange={item => {
+                    setSelectedAgent(item.value)
+                  }}
+                  placeholder="Select Agent"
+                  style={{
+                    borderColor: "#9ca3af",
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    paddingHorizontal: 8,
+                    padding: 10
+                  }}
+                  containerStyle={{
+                    borderRadius: 6,
+                  }}
+                  itemTextStyle={{
+                    color: "#000",
+                  }}
+                  selectedTextStyle={{
+                    color: "#000",
+                  }}
+                  renderRightIcon={() =>
+                    selectedAgent ? (
+                      <TouchableOpacity
+                        onPress={() => setSelectedAgent("")}
+                        style={{
+                          position: "absolute",
+                          right: 10,
+                          zIndex: 10,
+                          // backgroundColor: "#fff",
+                          width: 24,
+                          height: 24,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: 12,
 
-                            }}
-                          >
-                            <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                          </TouchableOpacity>
-                        ) : null
-                      }
-                    />
-                  </View>
-                )}
-
+                        }}
+                      >
+                        <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                      </TouchableOpacity>
+                    ) : null
+                  }
+                />
               </View>
             )}
+
+          </View>
 
           <View className="flex-row items-center mb-4 gap-2">
             {[1, 2, 3].map((num) => (

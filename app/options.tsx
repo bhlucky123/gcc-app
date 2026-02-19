@@ -32,7 +32,7 @@ const OptionsPage = () => {
     {
       label: "Result",
       route: `/result`,
-    },
+    }
   ];
 
   return (
@@ -70,7 +70,7 @@ const OptionsPage = () => {
       ))}
 
       {
-        user?.user_type === "ADMIN" && (
+        (user?.user_type === "ADMIN" || user?.user_type === "DEALER") && (
           <TouchableOpacity
             className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
             activeOpacity={0.7}
@@ -93,6 +93,20 @@ const OptionsPage = () => {
             }}
           >
             <Text className="text-center text-base text-black">My Commission</Text>
+          </TouchableOpacity>
+        )
+      }
+
+{
+        user?.user_type === "ADMIN" && (
+          <TouchableOpacity
+            className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
+            activeOpacity={0.7}
+            onPress={() => {
+              router.push("/top-numbers");
+            }}
+          >
+            <Text className="text-center text-base text-black">Top Numbers</Text>
           </TouchableOpacity>
         )
       }

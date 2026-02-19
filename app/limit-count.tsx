@@ -1,3 +1,4 @@
+import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -157,9 +158,18 @@ const LimitCountItem = memo(
     }
 );
 
+// API path: admin uses limit-number-count, dealer uses dealer-limit-number-count
+const LIMIT_API_BASE =
+    (userType: string | undefined) =>
+    userType === "DEALER"
+        ? "/draw/dealer-limit-number-count"
+        : "/draw/limit-number-count";
+
 const LimitCountScreen = () => {
+    const { user } = useAuthStore();
     const { selectedDraw } = useDrawStore();
     const queryClient = useQueryClient();
+    const apiBase = LIMIT_API_BASE(user?.user_type);
 
     // UI state for adding new limit
     const [limitType, setLimitType] = useState<"single_number" | "range">("single_number");
@@ -172,15 +182,15 @@ const LimitCountScreen = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const { data: limitCounts, isLoading, error } = useQuery<LimitCount[]>({
-        queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
+        queryKey: [apiBase, selectedDraw?.id],
         queryFn: async () => {
             if (!selectedDraw?.id) return [];
             const res = await api.get<LimitCount[]>(
-                `/draw/limit-number-count/?draw__id=${selectedDraw.id}`
+                `${apiBase}/?draw__id=${selectedDraw.id}`
             );
             return res.data;
         },
-        enabled: !!selectedDraw?.id,
+        enabled: !!selectedDraw?.id && !!apiBase,
     });
 
     const addLimitMutation = useMutation({
@@ -193,11 +203,11 @@ const LimitCountScreen = () => {
             draw: number;
             number_type: "single_digit" | "double_digit" | "triple_digit"
         }) => {
-            return api.post("/draw/limit-number-count/", payload);
+            return api.post(`${apiBase}/`, payload);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({
-                queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
+                queryKey: [apiBase, selectedDraw?.id],
             });
             setNewNumber("");
             setNewRangeStart("");
@@ -208,7 +218,8 @@ const LimitCountScreen = () => {
         },
         onError: (err: any) => {
             setIsSubmitting(false);
-            let errorMsg =
+            console.log("err", err);
+            let errorMsg = err?.message?.__all__?.[0] ||
                 err?.response?.data?.non_field_errors?.[0] ||
                 err?.message?.non_field_errors?.[0] ||
                 "Failed to add limit count.";
@@ -254,11 +265,11 @@ const LimitCountScreen = () => {
 
     const deleteLimitMutation = useMutation({
         mutationFn: (id: number) => {
-            return api.delete(`/draw/limit-number-count/${id}/`);
+            return api.delete(`${apiBase}/${id}/`);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({
-                queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
+                queryKey: [apiBase, selectedDraw?.id],
             });
             ToastAndroid.show("Limit count deleted.", ToastAndroid.SHORT);
         },
@@ -603,7 +614,7 @@ const LimitCountScreen = () => {
             className="flex-1 bg-blue-50"
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-            <SafeAreaView className="flex-1 p-4 mb-24 pb-24 bg-blue-50">
+            <SafeAreaView className="flex-1 p-4  bg-blue-50">
                 {isLoading ? (
                     <ActivityIndicator size="large" style={{ marginTop: 32 }} color="#2563eb" />
                 ) : error ? (
@@ -611,7 +622,7 @@ const LimitCountScreen = () => {
                         Failed to load limit counts.
                     </Text>
                 ) : (
-                    <View>
+                    <View className="flex-1">
                         {renderHeader()}
                         <FlatList
                             data={limitCounts || []}
@@ -622,8 +633,9 @@ const LimitCountScreen = () => {
                                     No limit counts found.
                                 </Text>
                             }
-                            contentContainerStyle={{ paddingBottom: 32 }}
-                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={{ paddingBottom: 32, flexGrow: 1 }}
+                            style={{ flex: 1 }}
+                            showsVerticalScrollIndicator={true}
                             keyboardShouldPersistTaps="handled"
                         />
                     </View>

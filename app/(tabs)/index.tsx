@@ -75,6 +75,23 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     elevation: 4,
   },
+  dashboardBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    marginRight: 8,
+  },
+  dashboardBtnText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4f46e5",
+  },
   loadingRow: {
     marginBottom: 16,
     flexDirection: "row",
@@ -701,6 +718,10 @@ export default function HomeScreen() {
 
   const queryClient = useQueryClient();
 
+  const goToDashboard = () => {
+    router.push("/dashboard");
+  };
+
   const {
     data,
     error,
@@ -727,7 +748,7 @@ export default function HomeScreen() {
   };
 
   // New: Show modal to confirm draw name before delete
-  const handleDeleteDraw = (draw) => {
+  const handleDeleteDraw = (draw:any) => {
     setDeleteDraw(draw);
     setDeleteInput("");
     setDeleteError("");
@@ -737,14 +758,14 @@ export default function HomeScreen() {
   // New: Actually delete after confirmation
   const confirmDeleteDraw = async () => {
     if (!deleteDraw) return;
-    if (deleteInput.trim() !== deleteDraw.name) {
+    if (deleteInput.trim() !== deleteDraw?.name) {
       setDeleteError("Draw name does not match. Please enter the exact name.");
       return;
     }
     setDeleteError("");
     setDeleteModalVisible(false);
     try {
-      await api.delete(`/draw/${deleteDraw.id}/`);
+      await api.delete(`/draw/${deleteDraw?.id}/`);
       await queryClient.invalidateQueries({ queryKey: ["/draw/list/"] });
     } catch (err) {
       Alert.alert("Error", "Failed to delete draw. Please try again.");
@@ -766,20 +787,35 @@ export default function HomeScreen() {
           🎲 Draws
         </Text>
 
-        {/* add‑button */}
-        {user?.user_type === "ADMIN" && (
-          <TouchableOpacity
-            onPress={() => {
-              setEditDraw(null);
-              setShowForm(true);
-            }}
-            accessibilityLabel="Add new draw"
-            activeOpacity={0.85}
-            style={styles.addButton}
-          >
-            <AntDesign name="plus" size={26} color="#fff" />
-          </TouchableOpacity>
-        )}
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* Go to dashboard */}
+          {user?.user_type === "ADMIN" && (
+            <TouchableOpacity
+              onPress={goToDashboard}
+              accessibilityLabel="Go to dashboard"
+              activeOpacity={0.85}
+              style={styles.dashboardBtn}
+            >
+              <AntDesign name="home" size={18} color="#4f46e5" />
+              <Text style={styles.dashboardBtnText}>Dashboard</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* add‑button */}
+          {user?.user_type === "ADMIN" && (
+            <TouchableOpacity
+              onPress={() => {
+                setEditDraw(null);
+                setShowForm(true);
+              }}
+              accessibilityLabel="Add new draw"
+              activeOpacity={0.85}
+              style={styles.addButton}
+            >
+              <AntDesign name="plus" size={26} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {(isLoading || isFetching) && (

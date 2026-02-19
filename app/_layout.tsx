@@ -181,6 +181,32 @@ export default function RootLayout() {
           <Stack.Screen name="report/[id]" options={{
             headerShown: false,
           }} />
+
+          <Stack.Screen name="top-numbers" options={{
+            headerShown: true,
+            title: "Top Numbers",
+            headerStyle: { backgroundColor: "#6366f1" },
+            headerTitleStyle: {
+              color: "#fff",
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: "#fff",
+          }} />
+
+          <Stack.Screen name="dashboard" options={{
+            headerShown: true,
+            title: "Dashboard",
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
+            headerShadowVisible: false,
+          }} />
+
           <Stack.Screen name="+not-found" />
         </Stack>
       </AlertNotificationRoot>

@@ -10,6 +10,6 @@ export const config: Config = {
   // apiBaseUrl: "https://alfarah.in",
   apiBaseUrl: "https://clctr.alfarah.in",
   // userType: "ADMIN",
-  // userType: "DEALER",
-  userType: "AGENT",
+  userType: "DEALER",
+  // userType: "AGENT",
 };
