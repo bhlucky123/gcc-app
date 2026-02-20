@@ -5,10 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { memo, useCallback, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     FlatList,
     KeyboardAvoidingView,
+    Modal,
     Platform,
+    Pressable,
     SafeAreaView,
     Text,
     TextInput,
@@ -16,16 +17,21 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { ALERT_TYPE, Dialog } from "react-native-alert-notification";
+import { Dropdown } from "react-native-element-dropdown";
+
+type Dealer = { id: number; username: string };
 
 type LimitCount = {
     id: number;
-    number: string;
+    number: string | null;
     count: number;
     draw: number;
     limit_type: "single_number" | "range";
-    range_start: string;
-    range_end: string;
+    range_start: string | null;
+    range_end: string | null;
     number_type?: "single_digit" | "double_digit" | "triple_digit";
+    dealer_details?: { id: number; username: string; user_type?: string } | null;
 };
 
 // Memoized item to avoid hook error and unnecessary re-renders
@@ -34,10 +40,12 @@ const LimitCountItem = memo(
         item,
         updateLimitMutation,
         deleteLimitMutation,
+        onDeletePress,
     }: {
         item: LimitCount;
         updateLimitMutation: any;
         deleteLimitMutation: any;
+        onDeletePress: (item: LimitCount) => void;
     }) => {
         const [editCount, setEditCount] = useState(item.count.toString());
         const [isEditing, setIsEditing] = useState(false);
@@ -73,6 +81,11 @@ const LimitCountItem = memo(
                                 {displayNumberType}
                             </Text>
                         )}
+                        {item.dealer_details?.username && (
+                            <Text className="text-xs text-blue-gray-500 font-medium mt-0.5">
+                                Dealer: {item.dealer_details.username}
+                            </Text>
+                        )}
                     </View>
                     <View className="flex-1">
                         <Text className="text-xs text-blue-gray-400 font-medium mb-0.5 tracking-tight">
@@ -101,16 +114,21 @@ const LimitCountItem = memo(
                                 onPress={() => {
                                     const countNum = parseInt(editCount, 10);
                                     if (isNaN(countNum) || countNum < 0) {
-                                        Alert.alert("Invalid", "Please enter a valid count.");
+                                        Dialog.show({
+                                            type: ALERT_TYPE.WARNING,
+                                            title: "Invalid",
+                                            textBody: "Please enter a valid count.",
+                                            button: "OK",
+                                        });
                                         return;
                                     }
                                     updateLimitMutation.mutate({
                                         id: item.id,
                                         count: countNum,
                                         limit_type: item.limit_type,
-                                        range_start: item.range_start,
-                                        range_end: item.range_end,
-                                        number: item.number,
+                                        range_start: item.range_start ?? "",
+                                        range_end: item.range_end ?? "",
+                                        number: item.number ?? "",
                                         number_type: item?.number_type || "single_digit" // fallback
                                     });
                                     setIsEditing(false);
@@ -132,22 +150,7 @@ const LimitCountItem = memo(
                         )}
                         <TouchableOpacity
                             className="bg-red-50 py-1.5 px-3 rounded border border-red-100 justify-center items-center"
-                            onPress={() => {
-                                Alert.alert(
-                                    "Delete",
-                                    item.limit_type === "range"
-                                        ? `Delete limit for range ${item.range_start} - ${item.range_end}?`
-                                        : `Delete limit for number ${item.number}?`,
-                                    [
-                                        { text: "Cancel", style: "cancel" },
-                                        {
-                                            text: "Delete",
-                                            style: "destructive",
-                                            onPress: () => deleteLimitMutation.mutate(item.id),
-                                        },
-                                    ]
-                                );
-                            }}
+                            onPress={() => onDeletePress(item)}
                         >
                             <Text className="text-red-500 font-black text-lg tracking-tight">✕</Text>
                         </TouchableOpacity>
@@ -175,22 +178,48 @@ const LimitCountScreen = () => {
     const [limitType, setLimitType] = useState<"single_number" | "range">("single_number");
     const [numberType, setNumberType] = useState<"single_digit" | "double_digit" | "triple_digit">("single_digit");
 
+    // Filter for list by number_type
+    const [filterNumberType, setFilterNumberType] = useState<"all" | "single_digit" | "double_digit" | "triple_digit">("all");
+    // Dealer filter for list (admin only)
+    const [filterDealerId, setFilterDealerId] = useState<number | "">("");
+    // Selected dealer when creating (admin only) - null = global limit
+    const [selectedDealerForCreate, setSelectedDealerForCreate] = useState<number | null>(null);
+
+    const { data: dealers = [] as Dealer[] } = useQuery<Dealer[]>({
+        queryKey: ["dealers"],
+        queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+        enabled: user?.user_type === "ADMIN",
+    });
+
     const [newNumber, setNewNumber] = useState("");
     const [newRangeStart, setNewRangeStart] = useState("");
     const [newRangeEnd, setNewRangeEnd] = useState("");
     const [newCount, setNewCount] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [validationError, setValidationError] = useState<string | null>(null);
+    const [errorFields, setErrorFields] = useState<("number" | "rangeStart" | "rangeEnd" | "count" | "dealer")[]>([]);
 
-    const { data: limitCounts, isLoading, error } = useQuery<LimitCount[]>({
-        queryKey: [apiBase, selectedDraw?.id],
+    const clearValidation = () => {
+        setValidationError(null);
+        setErrorFields([]);
+    };
+
+    const { data: limitCounts, isLoading, isFetching, error } = useQuery<LimitCount[]>({
+        queryKey: [apiBase, selectedDraw?.id, filterNumberType, filterDealerId],
         queryFn: async () => {
             if (!selectedDraw?.id) return [];
-            const res = await api.get<LimitCount[]>(
-                `${apiBase}/?draw__id=${selectedDraw.id}`
-            );
+            let url = `${apiBase}/?draw__id=${selectedDraw.id}`;
+            if (filterNumberType !== "all") {
+                url += `&number_type=${filterNumberType}`;
+            }
+            if (user?.user_type === "ADMIN" && filterDealerId) {
+                url += `&dealer__id=${filterDealerId}`;
+            }
+            const res = await api.get<LimitCount[]>(url);
             return res.data;
         },
         enabled: !!selectedDraw?.id && !!apiBase,
+        placeholderData: (prev) => prev,
     });
 
     const addLimitMutation = useMutation({
@@ -201,9 +230,14 @@ const LimitCountScreen = () => {
             range_start: string;
             range_end: string;
             draw: number;
-            number_type: "single_digit" | "double_digit" | "triple_digit"
+            number_type: "single_digit" | "double_digit" | "triple_digit";
+            dealer?: number | null;
         }) => {
-            return api.post(`${apiBase}/`, payload);
+            const body = { ...payload };
+            if (user?.user_type === "ADMIN") {
+                body.dealer = payload.dealer ?? null;
+            }
+            return api.post(`${apiBase}/`, body);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({
@@ -214,11 +248,24 @@ const LimitCountScreen = () => {
             setNewRangeEnd("");
             setNewCount("");
             setIsSubmitting(false);
+            clearValidation();
             ToastAndroid.show("Limit count added successfully.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             setIsSubmitting(false);
             console.log("err", err);
+
+            // Handle dealer-specific config error inline
+            const dealerError =
+                err?.response?.data?.message?.dealer?.[0] ||
+                err?.message?.dealer?.[0];
+            if (dealerError) {
+                setSelectedDealerForCreate(null);
+                setValidationError(dealerError);
+                setErrorFields(["dealer"]);
+                return;
+            }
+
             let errorMsg = err?.message?.__all__?.[0] ||
                 err?.response?.data?.non_field_errors?.[0] ||
                 err?.message?.non_field_errors?.[0] ||
@@ -229,7 +276,12 @@ const LimitCountScreen = () => {
             ) {
                 errorMsg = "This number or range is already limited for the selected draw.";
             }
-            Alert.alert("Error", errorMsg);
+            Dialog.show({
+                type: ALERT_TYPE.DANGER,
+                title: "Error",
+                textBody: errorMsg,
+                button: "OK",
+            });
         },
     });
 
@@ -256,10 +308,12 @@ const LimitCountScreen = () => {
             ToastAndroid.show("Limit count updated.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
-            Alert.alert(
-                "Error",
-                err?.response?.data?.detail || "Failed to update limit count."
-            );
+            Dialog.show({
+                type: ALERT_TYPE.DANGER,
+                title: "Error",
+                textBody: err?.response?.data?.detail || "Failed to update limit count.",
+                button: "OK",
+            });
         },
     });
 
@@ -274,12 +328,36 @@ const LimitCountScreen = () => {
             ToastAndroid.show("Limit count deleted.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
-            Alert.alert(
-                "Error",
-                err?.response?.data?.detail || "Failed to delete limit count."
-            );
+            Dialog.show({
+                type: ALERT_TYPE.DANGER,
+                title: "Error",
+                textBody: err?.response?.data?.detail || "Failed to delete limit count.",
+                button: "OK",
+            });
         },
     });
+
+    // Delete confirmation modal
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [deleteItem, setDeleteItem] = useState<LimitCount | null>(null);
+
+    const handleDeletePress = useCallback((item: LimitCount) => {
+        setDeleteItem(item);
+        setDeleteModalVisible(true);
+    }, []);
+
+    const handleDeleteConfirm = useCallback(() => {
+        if (deleteItem) {
+            deleteLimitMutation.mutate(deleteItem.id);
+            setDeleteModalVisible(false);
+            setDeleteItem(null);
+        }
+    }, [deleteItem, deleteLimitMutation]);
+
+    const handleDeleteCancel = useCallback(() => {
+        setDeleteModalVisible(false);
+        setDeleteItem(null);
+    }, []);
 
     // Utility to get digit length
     const getDigitsForType = (type: "single_digit" | "double_digit" | "triple_digit") => {
@@ -293,42 +371,69 @@ const LimitCountScreen = () => {
 
     // Filter input so that only up-to-N digits can be entered, and numbers only
     const onSetNewNumber = (text: string) => {
+        clearValidation();
         let onlyDigits = text.replace(/\D/g, "");
         const maxLen = getDigitsForType(numberType);
         setNewNumber(onlyDigits.slice(0, maxLen));
     };
 
     const onSetNewRangeStart = (text: string) => {
+        clearValidation();
         const onlyDigits = text.replace(/\D/g, "");
         setNewRangeStart(onlyDigits.slice(0, getDigitsForType(numberType)));
     };
 
     const onSetNewRangeEnd = (text: string) => {
+        clearValidation();
         const onlyDigits = text.replace(/\D/g, "");
         setNewRangeEnd(onlyDigits.slice(0, getDigitsForType(numberType)));
     };
 
+    const onSetNewCount = (text: string) => {
+        clearValidation();
+        setNewCount(text.replace(/\D/g, ""));
+    };
+
     const handleAddLimit = () => {
+        clearValidation();
         if (!selectedDraw?.id) {
-            Alert.alert("No Draw", "Please select a draw.");
+            setValidationError("Please select a draw first.");
             return;
         }
         const countNum = parseInt(newCount, 10);
 
-        if (isNaN(countNum) || countNum < 0) {
-            Alert.alert("Invalid", "Please enter a valid count.");
+        if(!newNumber?.trim() && limitType === "single_number") {
+            setValidationError("Number is required.");
+            setErrorFields(["number"]);
+            return;
+        }
+
+        if(!newRangeStart?.trim() && limitType === "range") {
+            setValidationError("Range start is required.");
+            setErrorFields(["rangeStart"]);
+            return;
+        }
+
+        if(!newRangeEnd?.trim() && limitType === "range") {
+            setValidationError("Range end is required.");
+            setErrorFields(["rangeEnd"]);
+            return;
+        }
+
+        if (isNaN(countNum) || countNum < 0 || !newCount?.trim()) {
+            setValidationError("Count is required.");
+            setErrorFields(["count"]);
             return;
         }
 
         if (limitType === "single_number") {
             const trimmedNumber = newNumber.trim();
             const requiredDigits = getDigitsForType(numberType);
+            const digitLabel = requiredDigits === 1 ? "single" : requiredDigits === 2 ? "double" : "triple";
 
             if (!/^\d+$/.test(trimmedNumber) || trimmedNumber.length !== requiredDigits) {
-                Alert.alert(
-                    "Invalid",
-                    `Please enter a valid ${requiredDigits === 1 ? "single" : requiredDigits === 2 ? "double" : "triple"} digit number.`
-                );
+                setValidationError(`${digitLabel} digit number (${requiredDigits} digit${requiredDigits > 1 ? "s" : ""}) is required.`);
+                setErrorFields(["number"]);
                 return;
             }
             setIsSubmitting(true);
@@ -340,6 +445,7 @@ const LimitCountScreen = () => {
                 range_end: "",
                 draw: selectedDraw.id,
                 number_type: numberType,
+                dealer: user?.user_type === "ADMIN" ? selectedDealerForCreate : undefined,
             });
         } else {
             // range
@@ -353,11 +459,13 @@ const LimitCountScreen = () => {
                 trimmedStart.length !== requiredDigits ||
                 trimmedEnd.length !== requiredDigits
             ) {
-                Alert.alert("Invalid", `Please enter valid and equal length (${requiredDigits}) range start and end.`);
+                setValidationError(`Enter valid range (${requiredDigits} digit${requiredDigits > 1 ? "s" : ""} each).`);
+                setErrorFields(["rangeStart", "rangeEnd"]);
                 return;
             }
             if (parseInt(trimmedStart, 10) > parseInt(trimmedEnd, 10)) {
-                Alert.alert("Invalid", "Range start should be less than or equal to range end.");
+                setValidationError("Range start must be less than or equal to range end.");
+                setErrorFields(["rangeStart", "rangeEnd"]);
                 return;
             }
             setIsSubmitting(true);
@@ -368,7 +476,8 @@ const LimitCountScreen = () => {
                 range_start: trimmedStart,
                 range_end: trimmedEnd,
                 draw: selectedDraw.id,
-                number_type: numberType, // range is now tracked with numberType
+                number_type: numberType,
+                dealer: user?.user_type === "ADMIN" ? selectedDealerForCreate : undefined,
             });
         }
     };
@@ -431,6 +540,7 @@ const LimitCountScreen = () => {
                             }}
                             activeOpacity={0.9}
                             onPress={() => {
+                                clearValidation();
                                 setNumberType(type);
                                 setNewNumber("");
                                 setNewRangeStart("");
@@ -484,6 +594,7 @@ const LimitCountScreen = () => {
                         elevation: limitType === type ? 2 : 0
                     }}
                     onPress={() => {
+                        clearValidation();
                         setLimitType(type);
                         setNewNumber(""); setNewRangeStart(""); setNewRangeEnd("");
                     }}
@@ -503,12 +614,117 @@ const LimitCountScreen = () => {
         </View>
     );
 
+    // Dealer filter for list (admin only)
+    const DealerFilter = () =>
+        user?.user_type === "ADMIN" ? (
+            <View style={{ width: "100%", marginBottom: 10 }}>
+                <Text className="text-xs text-blue-gray-500 font-medium mb-1">Filter by dealer</Text>
+                <Dropdown
+                    data={[{ label: "All dealers", value: "" }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
+                    labelField="label"
+                    valueField="value"
+                    value={filterDealerId}
+                    placeholder="All dealers"
+                    onChange={(item: { value: number | "" }) => setFilterDealerId(item.value)}
+                    style={{
+                        borderColor: "#c7d5fa",
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        backgroundColor: "#fff",
+                    }}
+                    selectedTextStyle={{ color: "#1e293b", fontSize: 14 }}
+                    itemTextStyle={{ color: "#1e293b", fontSize: 14 }}
+                />
+            </View>
+        ) : null;
+
+    // Filter tabs for list
+    const FilterTabs = () => (
+        <View style={{ width: "100%", marginBottom: 12 }}>
+            <View
+                style={{
+                    width: "100%",
+                    flexDirection: "row",
+                    backgroundColor: "#EFF6FF",
+                    borderRadius: 12,
+                    padding: 4,
+                }}
+            >
+                {(["all", "single_digit", "double_digit", "triple_digit"] as const).map((type) => {
+                    const selected = filterNumberType === type;
+                    return (
+                        <TouchableOpacity
+                            key={type}
+                            style={{
+                                flex: 1,
+                                paddingVertical: 10,
+                                marginHorizontal: 2,
+                                borderRadius: 10,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: selected ? "#3B82F6" : "transparent",
+                            }}
+                            onPress={() => setFilterNumberType(type)}
+                            disabled={isLoading}
+                        >
+                            <Text
+                                style={{
+                                    fontSize: 14,
+                                    fontWeight: "600",
+                                    color: selected ? "#FFFFFF" : "#2563EB",
+                                }}
+                            >
+                                {type === "all"
+                                    ? "All"
+                                    : type === "single_digit"
+                                        ? "Single"
+                                        : type === "double_digit"
+                                            ? "Double"
+                                            : "Triple"}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </View>
+    );
+
     const renderHeader = () => (
         <View>
             <View className="bg-white rounded-xl p-4 mb-4 shadow shadow-black/10">
                 <Text className="text-base font-semibold text-blue-600 mb-1 tracking-tight">
                     Add Limit
                 </Text>
+                {user?.user_type === "ADMIN" && (
+                    <View className="mb-3">
+                        <Text className="text-xs text-blue-gray-400 font-medium mb-1 tracking-tight">
+                            Dealer (optional - leave empty for global)
+                        </Text>
+                        <Dropdown
+                            data={[{ label: "Global (all dealers)", value: null }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
+                            labelField="label"
+                            valueField="value"
+                            value={selectedDealerForCreate}
+                            placeholder="Select dealer"
+                            onChange={(item: { value: number | null }) => {
+                                clearValidation();
+                                setSelectedDealerForCreate(item.value);
+                            }}
+                            style={{
+                                borderColor: errorFields.includes("dealer") ? "#DC2626" : "#c7d5fa",
+                                borderWidth: 1,
+                                borderRadius: 8,
+                                paddingHorizontal: 12,
+                                paddingVertical: 10,
+                                backgroundColor: "#fff",
+                            }}
+                            selectedTextStyle={{ color: "#1e293b", fontSize: 14 }}
+                            itemTextStyle={{ color: "#1e293b", fontSize: 14 }}
+                        />
+                    </View>
+                )}
                 <NumberTypeTabs />
                 <LimitTypeTabs />
 
@@ -521,6 +737,10 @@ const LimitCountScreen = () => {
                                 </Text>
                                 <TextInput
                                     className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
+                                    style={{
+                                        borderWidth: 1,
+                                        borderColor: errorFields.includes("number") ? "#DC2626" : "#C7D2FE",
+                                    }}
                                     placeholder="Number"
                                     value={newNumber}
                                     onChangeText={onSetNewNumber}
@@ -540,6 +760,10 @@ const LimitCountScreen = () => {
                                 </Text>
                                 <TextInput
                                     className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
+                                    style={{
+                                        borderWidth: 1,
+                                        borderColor: errorFields.includes("rangeStart") ? "#DC2626" : "#C7D2FE",
+                                    }}
                                     placeholder="Start"
                                     value={newRangeStart}
                                     onChangeText={onSetNewRangeStart}
@@ -556,6 +780,10 @@ const LimitCountScreen = () => {
                                 </Text>
                                 <TextInput
                                     className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
+                                    style={{
+                                        borderWidth: 1,
+                                        borderColor: errorFields.includes("rangeEnd") ? "#DC2626" : "#C7D2FE",
+                                    }}
                                     placeholder="End"
                                     value={newRangeEnd}
                                     onChangeText={onSetNewRangeEnd}
@@ -574,9 +802,13 @@ const LimitCountScreen = () => {
                         </Text>
                         <TextInput
                             className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
+                            style={{
+                                borderWidth: 1,
+                                borderColor: errorFields.includes("count") ? "#DC2626" : "#C7D2FE",
+                            }}
                             placeholder="Count"
                             value={newCount}
-                            onChangeText={setNewCount}
+                            onChangeText={onSetNewCount}
                             keyboardType="number-pad"
                             editable={!isSubmitting}
                             placeholderTextColor="#b0b0b0"
@@ -594,6 +826,11 @@ const LimitCountScreen = () => {
                         </Text>
                     </TouchableOpacity>
                 </View>
+                {validationError && (
+                    <Text className="text-red-600 text-sm font-medium mt-2">
+                        {validationError}
+                    </Text>
+                )}
             </View>
         </View>
     );
@@ -604,9 +841,10 @@ const LimitCountScreen = () => {
                 item={item}
                 updateLimitMutation={updateLimitMutation}
                 deleteLimitMutation={deleteLimitMutation}
+                onDeletePress={handleDeletePress}
             />
         ),
-        [updateLimitMutation, deleteLimitMutation]
+        [updateLimitMutation, deleteLimitMutation, handleDeletePress]
     );
 
     return (
@@ -628,6 +866,17 @@ const LimitCountScreen = () => {
                             data={limitCounts || []}
                             keyExtractor={(item) => item.id.toString()}
                             renderItem={renderLimitItem}
+                            ListHeaderComponent={
+                                <View>
+                                    <DealerFilter />
+                                    <FilterTabs />
+                                    {isFetching && (
+                                        <View className="py-4 items-center">
+                                            <ActivityIndicator size="small" color="#2563eb" />
+                                        </View>
+                                    )}
+                                </View>
+                            }
                             ListEmptyComponent={
                                 <Text className="text-blue-gray-400 text-center mt-8 text-base font-medium">
                                     No limit counts found.
@@ -640,6 +889,64 @@ const LimitCountScreen = () => {
                         />
                     </View>
                 )}
+
+                {/* Delete confirmation modal */}
+                <Modal
+                    visible={deleteModalVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={handleDeleteCancel}
+                >
+                    <Pressable
+                        className="flex-1 justify-center items-center bg-black/40 px-4"
+                        onPress={handleDeleteCancel}
+                    >
+                        <Pressable
+                            className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg"
+                            onPress={(e) => e.stopPropagation()}
+                        >
+                            <View className="items-center mb-4">
+                                <View className="w-12 h-12 rounded-full bg-red-100 items-center justify-center mb-3">
+                                    <Text className="text-red-600 text-2xl font-bold">!</Text>
+                                </View>
+                                <Text className="text-xl font-bold text-red-600 text-center">
+                                    Delete Limit
+                                </Text>
+                            </View>
+                            <Text className="text-base text-gray-600 mb-6 text-center">
+                                {deleteItem?.limit_type === "range"
+                                    ? `Are you sure you want to delete the limit for range `
+                                    : "Are you sure you want to delete the limit for number "}
+                                <Text className="font-semibold text-gray-900">
+                                    {deleteItem?.limit_type === "range"
+                                        ? `${deleteItem?.range_start ?? ""} - ${deleteItem?.range_end ?? ""}`
+                                        : deleteItem?.number ?? ""}
+                                </Text>
+                                ? This action cannot be undone.
+                            </Text>
+                            <View className="flex-row gap-3">
+                                <TouchableOpacity
+                                    onPress={handleDeleteCancel}
+                                    className="flex-1 bg-gray-100 py-3 rounded-xl items-center"
+                                    activeOpacity={0.8}
+                                >
+                                    <Text className="text-gray-700 font-bold text-base">Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={handleDeleteConfirm}
+                                    className="flex-1 bg-red-600 py-3 rounded-xl items-center"
+                                    activeOpacity={0.8}
+                                    disabled={deleteLimitMutation.isPending}
+                                    style={{ opacity: deleteLimitMutation.isPending ? 0.7 : 1 }}
+                                >
+                                    <Text className="text-white font-bold text-base">
+                                        {deleteLimitMutation.isPending ? "Deleting..." : "Delete"}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
             </SafeAreaView>
         </KeyboardAvoidingView>
     );

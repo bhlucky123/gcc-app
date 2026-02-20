@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.luckybh.gcc.dealer'
+    namespace 'com.luckybh.gcc.admin'
     defaultConfig {
-        applicationId 'com.luckybh.gcc.dealer'
+        applicationId 'com.luckybh.gcc.admin'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

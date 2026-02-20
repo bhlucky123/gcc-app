@@ -37,6 +37,8 @@ type DashboardSummary = {
   winnings: number;
   profit: number;
   total_dealer_pending?: number;
+  total_paid_amount?: number;
+  total_received_amount?: number;
 };
 
 type DailyItem = {
@@ -185,6 +187,41 @@ export default function AdminDashboard() {
             <BarChart3 size={20} color="#4f46e5" />
           </View>
         </View>
+
+        {/* Dealer pending summary (top) */}
+        {summary?.total_dealer_pending != null && (
+          <View className="px-4 mt-1 mb-1">
+            <View
+              className="rounded-2xl px-4 py-3 flex-row items-center justify-between"
+              style={{
+                backgroundColor: "#ecfdf3",
+                borderWidth: 1,
+                borderColor: "#bbf7d0",
+                shadowColor: "#16a34a",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.08,
+                shadowRadius: 4,
+                elevation: 2,
+              }}
+            >
+              <View className="flex-1 mr-3">
+                <Text className="text-[11px] text-emerald-700 font-semibold mb-1">
+                  Dealer pending amount
+                </Text>
+                <Text className="text-xl font-extrabold text-emerald-900">
+                  {formatAmount(summary.total_dealer_pending)}
+                </Text>
+                {/* <Text className="text-[10px] text-emerald-600 mt-1">
+                  Paid: {formatAmount(summary.total_paid_amount)} · Received:{" "}
+                  {formatAmount(summary.total_received_amount)}
+                </Text> */}
+              </View>
+              <View className="w-10 h-10 rounded-full bg-emerald-100 items-center justify-center">
+                <Wallet size={18} color="#047857" />
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Date range filter */}
         <View className="px-4 mt-1 mb-3">
@@ -406,15 +443,30 @@ export default function AdminDashboard() {
               </View>
 
               <View className="flex-1 bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
-                <Text className="text-[11px] text-emerald-700 mb-1">
-                  Pending Amount
-                </Text>
-                <Text className="text-lg font-extrabold text-emerald-900">
-                  {formatAmount(summary?.total_dealer_pending)}
-                </Text>
-                <Text className="text-[10px] text-emerald-500 mt-1">
-                  Old Balance
-                </Text>
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-[11px] text-emerald-700 font-semibold">
+                    Payments
+                  </Text>
+                  <Wallet size={14} color="#047857" />
+                </View>
+                <View className="mt-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-[10px] text-emerald-600">
+                      Paid:
+                    </Text>
+                    <Text className="text-sm font-semibold text-emerald-900">
+                      {formatAmount(summary?.total_paid_amount)}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between mt-1.5">
+                    <Text className="text-[10px] text-emerald-600">
+                      Received:
+                    </Text>
+                    <Text className="text-sm font-semibold text-emerald-900">
+                      {formatAmount(summary?.total_received_amount)}
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
 

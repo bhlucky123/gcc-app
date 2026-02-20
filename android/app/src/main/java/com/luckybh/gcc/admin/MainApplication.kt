@@ -1,4 +1,4 @@
-package com.luckybh.gcc.dealer
+package com.luckybh.gcc.admin
 
 import android.app.Application
 import android.content.res.Configuration

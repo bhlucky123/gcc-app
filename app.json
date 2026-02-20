@@ -1,9 +1,9 @@
 {
   "expo": {
     "name": "calculator",
-    "slug": "gcc-dealer",
+    "slug": "gcc-admin",
     "version": "1.0.0",
-    "scheme": "gcc-dealer",
+    "scheme": "gcc-admin",
     "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
     "web": {
@@ -32,9 +32,9 @@
       }
     },
     "android": {
-      "package": "com.luckybh.gcc.dealer",
-      "icon": "./assets/images/dealer-appicon.png"
+      "package": "com.luckybh.gcc.admin",
+      "icon": "./assets/images/admin-appicon.png"
     },
-    "icon": "./assets/images/dealer-appicon.png"
+    "icon": "./assets/images/admin-appicon.png"
   }
 }

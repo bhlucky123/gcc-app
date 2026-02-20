@@ -1,4 +1,4 @@
-package com.luckybh.gcc.dealer
+package com.luckybh.gcc.admin
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
