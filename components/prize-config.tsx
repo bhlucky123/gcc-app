@@ -78,10 +78,10 @@ export const PrizeConfigBlock: React.FC<{ onChange: (data: PrizeConfig | null) =
                                 }}
                                 keyboardType="numeric"
                                 style={{
-                                    backgroundColor: "#f3f4f6",
+                                    backgroundColor: hasError ? "#FEF2F2" : "#f3f4f6",
                                     borderRadius: 8,
                                     borderWidth: 1,
-                                    borderColor: "#cbd5e1",
+                                    borderColor: hasError ? "#EF4444" : "#cbd5e1",
                                     paddingHorizontal: 12,
                                     paddingVertical: 10,
                                     fontSize: 16,

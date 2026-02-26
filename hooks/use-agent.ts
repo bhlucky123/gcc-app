@@ -46,6 +46,16 @@ const useAgent = () => {
       api.delete(`/agent/manage/${id}/`).then((res) => res.data),
   });
 
+  const savePrizeConfigMutation = useMutation({
+    mutationFn: (payload: any) =>
+      api.post("/agent/prize-configuration/", payload).then((res) => res.data),
+  });
+
+  const updatePrizeConfigMutation = useMutation({
+    mutationFn: ({ agentId, ...payload }: any) =>
+      api.patch(`/agent/prize-configuration/${agentId}/`, payload).then((res) => res.data),
+  });
+
   return {
     // Create
     createAgent: createMutation.mutate,
@@ -67,6 +77,12 @@ const useAgent = () => {
     agentDeletingIsLoading: deleteMutation.isPending,
     agentDeleteError: deleteMutation.error,
     agentDeleteIsSuccess: deleteMutation.isSuccess,
+
+    // Prize Config
+    saveAgentPrizeConfig: savePrizeConfigMutation.mutate,
+    saveAgentPrizeConfigAsync: savePrizeConfigMutation.mutateAsync,
+    updateAgentPrizeConfig: updatePrizeConfigMutation.mutate,
+    updateAgentPrizeConfigAsync: updatePrizeConfigMutation.mutateAsync,
   };
 };
 

@@ -1,11 +1,12 @@
+import { PrizeConfigBlock } from "@/components/prize-config";
 import useAgent from "@/hooks/use-agent";
 import { useAuthStore } from "@/store/auth";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ArrowLeft, MoveLeft } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Eye, EyeOff, MoveLeft } from "lucide-react-native";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Card, PRIZE_CONFIG_FIELDS } from "./more";
 
 // Helper to flatten error object to field: message
 function parseApiErrors(errorObj: any): Record<string, string> {
@@ -41,7 +43,7 @@ function parseApiErrors(errorObj: any): Record<string, string> {
 // Agent type
 export type Agent = {
   id: number;
-  // password: string;
+  password: string;
   last_login: string | null;
   is_superuser: boolean;
   username: string;
@@ -60,51 +62,26 @@ export type Agent = {
   user_permissions: any[];
 };
 
-const CALC_OPERATORS = [
-  { label: "+", value: "+" },
-  { label: "-", value: "-" },
-  { label: "*", value: "*" },
-  { label: "/", value: "/" },
-];
-
 // Enhanced Form component with better animations and styling
 const AgentForm = ({
   onSubmit,
   defaultValues = {},
   onCancel,
   loading = false,
+  prizeConfig = null,
 }: {
   onSubmit: (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => void;
   defaultValues?: Partial<Agent>;
   onCancel: () => void;
-  loading?: boolean
+  loading?: boolean;
+  prizeConfig?: any;
 }) => {
   const { user } = useAuthStore()
-  
-  // For calculate string config: number, operator, second number
-  // During editing, parse out the firstNum, op, secondNum from calculate_str
-  let calculateFirstNumInitial = "";
-  let calculateOperatorInitial = "+";
-  let calculateSecondNumInitial = "";
-
-  if (defaultValues.calculate_str) {
-    // calculate_str will be like "+9": only operator and second number
-    const match = /^([+\-*/])\s*(\d+)$/.exec(defaultValues.calculate_str);
-    if (match) {
-        calculateOperatorInitial = match[1];
-        calculateSecondNumInitial = match[2];
-    }
-}
-
-
   const [form, setForm] = useState({
     username: defaultValues.username || "",
-    // password: "",
+    password: "",
     is_active: defaultValues.is_active ?? true,
-    // calculate_str is composed in handleSubmit from below:
-    calculate_first_number: defaultValues?.id,
-    calculate_operator: calculateOperatorInitial,
-    calculate_second_number: calculateSecondNumInitial,
+    calculate_str: defaultValues.calculate_str || "",
     secret_pin: defaultValues.secret_pin?.toString() || "",
     commission: defaultValues.commission?.toString() || "",
     single_digit_number_commission:
@@ -115,50 +92,24 @@ const AgentForm = ({
         ? defaultValues.assigned_dealer.toString()
         : user?.id?.toString() || ""
     ),
+    is_prize_set: !!prizeConfig,
+    single_digit_prize: prizeConfig?.single_digit_prize?.toString() || "",
+    double_digit_prize: prizeConfig?.double_digit_prize?.toString() || "",
+    box_direct: prizeConfig?.box_direct?.toString() || "",
+    box_indirect: prizeConfig?.box_indirect?.toString() || "",
+    super_first_prize: prizeConfig?.super_first_prize?.toString() || "",
+    super_second_prize: prizeConfig?.super_second_prize?.toString() || "",
+    super_third_prize: prizeConfig?.super_third_prize?.toString() || "",
+    super_fourth_prize: prizeConfig?.super_fourth_prize?.toString() || "",
+    super_fifth_prize: prizeConfig?.super_fifth_prize?.toString() || "",
+    super_complementary_prize: prizeConfig?.super_complementary_prize?.toString() || "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string>("");
   // Add state for password visibility
-  // const [showPassword, setShowPassword] = useState(false);
-
-  // Fetch calculate id if creating new; do not run if editing existing agent
-  const skipCalculateIdFetch = !!defaultValues?.id;
-  // Custom fetch logic: Only fetch when the form is opened (component mount), and not cached.
-  const [newUserIdData, setNewUserIdData] = useState<number | null>(null);
-  const [loadingCalcId, setLoadingCalcId] = useState(false);
-  const [errorCalcId, setErrorCalcId] = useState(false);
-  const fetchedRef = useRef(false);
-
-  useEffect(() => {
-    if (!skipCalculateIdFetch && !fetchedRef.current) {
-      setLoadingCalcId(true);
-      setErrorCalcId(false);
-      api.get(`/user/get-new-user-id/?user_type=AGENT`)
-        .then((res) => {
-          setNewUserIdData(res.data);
-          fetchedRef.current = true;
-          setLoadingCalcId(false);
-        })
-        .catch((e) => {
-          setErrorCalcId(true);
-          setLoadingCalcId(false);
-        });
-    }
-    // eslint-disable-next-line
-  }, [skipCalculateIdFetch]);
-
-  // On new userId fetched -> set to calculate_first_number
-  useEffect(() => {
-    if (!skipCalculateIdFetch && newUserIdData && !form.calculate_first_number) {
-      setForm(prev => ({
-        ...prev,
-        calculate_first_number: String(newUserIdData)
-      }));
-    }
-    // eslint-disable-next-line
-  }, [newUserIdData, skipCalculateIdFetch]);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (key: string, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -172,20 +123,40 @@ const AgentForm = ({
       newErrors.assigned_dealer = "Dealer ID is required";
     }
     if (!form.username.trim()) newErrors.username = "Username is required";
-    // if (!defaultValues?.id && !form.password.trim())
-    //   newErrors.password = "Password is required";
+    if (!defaultValues?.id && !form.password.trim())
+      newErrors.password = "Password is required";
 
-    // Calculate string validation
-    if (!form.calculate_first_number || isNaN(Number(form.calculate_first_number))) {
-      newErrors.calculate_str = "First number required";
+    if (!form.calculate_str.trim()) {
+      newErrors.calculate_str = "Calculate String is required";
+    } else {
+      // Validate that calculate_str is a valid equation (e.g., only numbers, +, -, *, /, parentheses, spaces)
+      const eq = form.calculate_str.trim();
+      // Only allow numbers, operators, parentheses, and spaces
+      if (!/^[\d+\-*/().\s]+$/.test(eq)) {
+        newErrors.calculate_str = "Calculate String must be a valid equation (numbers and + - * / only)";
+      } else {
+        // Try to evaluate the equation safely
+        try {
+          // eslint-disable-next-line no-new-func
+          // Only evaluate if it doesn't contain double operators or invalid patterns
+          // (basic check, not bulletproof)
+          // Disallow consecutive operators (except for minus for negative numbers)
+          if (/[\+\-\*\/]{2,}/.test(eq.replace(/--/g, ""))) {
+            throw new Error();
+          }
+          // eslint-disable-next-line no-new-func
+          // Evaluate using Function constructor (safer than eval, but still not 100% safe)
+          // Only for validation, not for actual calculation
+          // @ts-ignore
+          const result = Function(`"use strict";return (${eq})`)();
+          if (typeof result !== "number" || isNaN(result)) {
+            throw new Error();
+          }
+        } catch {
+          newErrors.calculate_str = "Calculate String must be a valid equation";
+        }
+      }
     }
-    if (!form.calculate_operator) {
-      newErrors.calculate_str = "Operator is required";
-    }
-    if (!form.calculate_second_number || isNaN(Number(form.calculate_second_number))) {
-      newErrors.calculate_str = "Second number required";
-    }
-
     if (
       !form?.secret_pin)
       newErrors.secret_pin = "Secret PIN is required";
@@ -208,6 +179,19 @@ const AgentForm = ({
     if (!form?.cap_amount) newErrors.cap_amount = "required";
     if (Number(form?.cap_amount) < 0) newErrors.cap_amount = "Cap cannot be negative";
 
+    if (form?.is_prize_set) {
+      if (!form?.single_digit_prize)
+        newErrors.single_digit_prize = "Single digit prize is required";
+      if (!form?.double_digit_prize)
+        newErrors.double_digit_prize = "Double digit prize is required";
+      if (!form?.box_direct)
+        newErrors.box_direct = "Box Direct is required";
+      if (!form?.super_first_prize)
+        newErrors.super_first_prize = "Super First Prize is required";
+      if (!form?.super_second_prize)
+        newErrors.super_second_prize = "Super Second Prize is required";
+    }
+
     setErrors(newErrors);
     setGeneralError("");
     return Object.keys(newErrors).length === 0;
@@ -216,12 +200,8 @@ const AgentForm = ({
   const handleSubmit = () => {
     if (!validate()) return;
 
-    // Compose calculate_str: "{firstNum}{op}{secondNum}", eg "12+9"
-    const calculate_str = `${form.calculate_operator}${form.calculate_second_number}`;
-
-    const preparedData = {
+    const preparedData: any = {
       ...form,
-      calculate_str,
       secret_pin: Number(form.secret_pin),
       commission: Number(form.commission),
       single_digit_number_commission: Number(form.single_digit_number_commission),
@@ -229,10 +209,21 @@ const AgentForm = ({
       assigned_dealer: Number(form.assigned_dealer),
     };
 
-    // Remove our UI fields if they exist to prevent type errors
-    delete (preparedData as any).calculate_first_number;
-    delete (preparedData as any).calculate_operator;
-    delete (preparedData as any).calculate_second_number;
+    // Attach prize config data separately
+    if (form.is_prize_set) {
+      preparedData._prizeConfig = {};
+      PRIZE_CONFIG_FIELDS.forEach(({ key }) => {
+        preparedData._prizeConfig[key] = Number(form[key]) || null;
+      });
+    }
+    preparedData._isPrizeSet = form.is_prize_set;
+    preparedData._hadPrizeConfig = !!prizeConfig;
+
+    // Clean prize fields from main payload
+    delete preparedData.is_prize_set;
+    PRIZE_CONFIG_FIELDS.forEach(({ key }) => {
+      delete preparedData[key];
+    });
 
     // Pass setErrors and setGeneralError to onSubmit for error handling
     onSubmit(preparedData, setErrors, setGeneralError);
@@ -240,7 +231,8 @@ const AgentForm = ({
 
   const inputFields = [
     { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "@" },
-    // { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
+    { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
+    { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
     { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🔐" },
     { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
     { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "📊" },
@@ -286,167 +278,78 @@ const AgentForm = ({
               <Text className="text-red-600 text-base font-semibold text-center">{generalError}</Text>
             </View>
           ) : null}
-
-          {/* Custom Calculate String Section */}
-          <View className="mb-6">
-            <Text className="text-gray-700 font-semibold mb-2 ml-1">
-              <Text>🧮 </Text>
-              <Text>Calculate String</Text>
-              <Text className="text-red-500"> *</Text>
-            </Text>
-            <View className="flex-row items-center space-x-2">
-              {/* Number fetched from API (first number) */}
-              <View style={{ flex: 1 }}>
-                <Text className="text-xs text-gray-500 mb-1">User ID</Text>
-                <View className={`
-                  border-2 rounded-xl px-4 py-3 bg-gray-100 text-gray-800
-                  ${focusedField === "calculate_first_number" ? "border-blue-300 bg-blue-50" : "border-gray-200"}
-                `}>
-                  <Text className="text-lg font-medium">
-                    {form.calculate_first_number ? form.calculate_first_number : (loadingCalcId ? "Loading..." : (errorCalcId ? "Error" : "--"))}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Operator dropdown */}
-              <View style={{ marginLeft: 6 }}>
-                <Text className="text-xs text-gray-500 mb-1">Operator</Text>
-                <View className={`
-                  border-2 rounded-xl px-2 py-1 bg-white text-gray-800
-                  ${focusedField === "calculate_operator" ? "border-blue-300 bg-blue-50" : "border-gray-200"}
-                `}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}>
-                    {CALC_OPERATORS.map(op => (
-                      <TouchableOpacity
-                        key={op.value}
-                        style={{
-                          marginHorizontal: 3,
-                          borderRadius: 8,
-                          backgroundColor: form.calculate_operator === op.value ? "#3B82F6" : "transparent",
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
-                        }}
-                        onPress={() => handleChange("calculate_operator", op.value)}
-                      >
-                        <Text style={{ color: form.calculate_operator === op.value ? "#fff" : "#222", fontWeight: "bold", fontSize: 18 }}>{op.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-
-              {/* Second number input */}
-              <View style={{ flex: 1, marginLeft: 6 }}>
-                <Text className="text-xs text-gray-500 mb-1">Second Number</Text>
-                <TextInput
-                  placeholder="e.g. 9"
-                  className={`
-                    border-2 rounded-xl px-4 py-3 bg-white
-                    text-gray-800 font-medium
-                    ${focusedField === "calculate_second_number"
-                      ? 'border-blue-400 bg-blue-50'
-                      : (form.calculate_second_number ? 'border-green-300 bg-green-50' : 'border-gray-200')}
-                  `}
-                  value={form.calculate_second_number}
-                  keyboardType="numeric"
-                  onFocus={() => setFocusedField("calculate_second_number")}
-                  onBlur={() => setFocusedField(null)}
-                  onChangeText={text => handleChange("calculate_second_number", text.replace(/[^0-9]/g, ""))}
-                  maxLength={4}
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-            </View>
-            {/* Validation error for calculate_str */}
-            {errors.calculate_str && (
-              <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
-                {errors.calculate_str}
-              </Text>
-            )}
-            <View className="mt-2">
-              <Text className="text-gray-500 text-sm">
-                <Text className="font-semibold">Preview:&nbsp;</Text>
-                <Text className="font-mono text-base text-blue-700">
-                  {form.calculate_first_number && form.calculate_operator && form.calculate_second_number
-                    ? `${form.calculate_first_number}${form.calculate_operator}${form.calculate_second_number}`
-                    : ""}
-                </Text>
-              </Text>
-            </View>
-          </View>
-
           {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
             const isFocused = focusedField === key;
             const hasError = !!errors[key];
             const hasValue = !!form[key as keyof typeof form];
 
             // Password field: add view/hide toggle
-            // if (key === "password") {
-            //   return (
-            //     <View key={key} className="mb-6">
-            //       <Text className="text-gray-700 font-semibold mb-2 ml-1">
-            //         <Text>{icon} </Text>
-            //         <Text>{label}</Text>
-            //         {!optional && <Text className="text-red-500"> *</Text>}
-            //       </Text>
-            //       <View className={`relative ${hasError ? 'mb-1' : ''}`}>
-            //         <TextInput
-            //           placeholder={optional ? `${label} (optional)` : `Enter ${label.toLowerCase()}`}
-            //           className={`
-            //             border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
-            //             ${hasError
-            //               ? 'border-red-300 bg-red-50'
-            //               : isFocused
-            //                 ? 'border-blue-400 bg-blue-50'
-            //                 : hasValue
-            //                   ? 'border-green-300 bg-green-50'
-            //                   : 'border-gray-200'
-            //             }
-            //             shadow-sm
-            //           `}
-            //           value={typeof form[key as keyof typeof form] === "boolean"
-            //             ? form[key as keyof typeof form]
-            //               ? "true"
-            //               : "false"
-            //             : (form[key as keyof typeof form] as string | undefined)
-            //           }
-            //           onChangeText={(text) => handleChange(key, text)}
-            //           onFocus={() => setFocusedField(key)}
-            //           onBlur={() => setFocusedField(null)}
-            //           keyboardType={keyboardType}
-            //           secureTextEntry={!showPassword}
-            //           autoCapitalize="none"
-            //           placeholderTextColor="#9CA3AF"
-            //         />
-            //         {/* Password view/hide toggle */}
-            //         <TouchableOpacity
-            //           onPress={() => setShowPassword((prev) => !prev)}
-            //           className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-100 rounded-full border border-gray-200"
-            //           style={{
-            //             zIndex: 10,
-            //             // The className above handles most styling, but fallback for platforms:
-            //             ...(Platform.OS === "web"
-            //               ? { boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }
-            //               : {}),
-            //           }}
-            //           // hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            //           activeOpacity={0.7}
-            //         >
-            //           {showPassword ? (
-            //             <Eye color="#6b7280" size={20} />
-            //           ) : (
-            //             <EyeOff color="#6b7280" size={20} />
-            //           )}
-            //         </TouchableOpacity>
-            //       </View>
-            //       {hasError && (
-            //         <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
-            //           {errors[key]}
-            //         </Text>
-            //       )}
-            //     </View>
-            //   );
-            // }
+            if (key === "password") {
+              return (
+                <View key={key} className="mb-6">
+                  <Text className="text-gray-700 font-semibold mb-2 ml-1">
+                    <Text>{icon} </Text>
+                    <Text>{label}</Text>
+                    {!optional && <Text className="text-red-500"> *</Text>}
+                  </Text>
+                  <View className={`relative ${hasError ? 'mb-1' : ''}`}>
+                    <TextInput
+                      placeholder={optional ? `${label} (optional)` : `Enter ${label.toLowerCase()}`}
+                      className={`
+                        border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
+                        ${hasError
+                          ? 'border-red-300 bg-red-50'
+                          : isFocused
+                            ? 'border-blue-400 bg-blue-50'
+                            : hasValue
+                              ? 'border-green-300 bg-green-50'
+                              : 'border-gray-200'
+                        }
+                        shadow-sm
+                      `}
+                      value={typeof form[key as keyof typeof form] === "boolean"
+                        ? form[key as keyof typeof form]
+                          ? "true"
+                          : "false"
+                        : (form[key as keyof typeof form] as string | undefined)
+                      }
+                      onChangeText={(text) => handleChange(key, text)}
+                      onFocus={() => setFocusedField(key)}
+                      onBlur={() => setFocusedField(null)}
+                      keyboardType={keyboardType}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      placeholderTextColor="#9CA3AF"
+                    />
+                    {/* Password view/hide toggle */}
+                    <TouchableOpacity
+                      onPress={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-100 rounded-full border border-gray-200"
+                      style={{
+                        zIndex: 10,
+                        // The className above handles most styling, but fallback for platforms:
+                        ...(Platform.OS === "web"
+                          ? { boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }
+                          : {}),
+                      }}
+                      // hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      {showPassword ? (
+                        <Eye color="#6b7280" size={20} />
+                      ) : (
+                        <EyeOff color="#6b7280" size={20} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  {hasError && (
+                    <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
+                      {errors[key]}
+                    </Text>
+                  )}
+                </View>
+              );
+            }
 
             // All other fields
             return (
@@ -535,7 +438,49 @@ const AgentForm = ({
             </TouchableOpacity>
           </View>
 
-          <View className="pb-20">
+          {/* Prize Config Toggle */}
+          <Card>
+            <View>
+              <TouchableOpacity
+                onPress={() => {
+                  handleChange('is_prize_set', !form.is_prize_set);
+                }}
+                className={`
+                  flex-row items-center justify-between p-4 rounded-xl border-2
+                  ${form.is_prize_set
+                    ? 'bg-green-50 border-green-300'
+                    : 'bg-gray-50 border-gray-300'
+                  }
+                `}
+                activeOpacity={0.8}
+              >
+                <Text className="text-gray-700 font-medium">Prize Config</Text>
+                <View className={`
+                  w-12 h-6 rounded-full p-1
+                  ${form.is_prize_set ? 'bg-green-500' : 'bg-gray-400'}
+                `}>
+                  <View className={`
+                    w-4 h-4 bg-white rounded-full transition-all duration-200
+                    ${form.is_prize_set ? 'ml-6' : 'ml-0'}
+                  `} />
+                </View>
+              </TouchableOpacity>
+            </View>
+            {form.is_prize_set && (
+              <PrizeConfigBlock
+                form={form}
+                errors={errors}
+                onChange={(data) => {
+                  if (data && Object.keys(data).length > 0) {
+                    setErrors({});
+                  }
+                  setForm((prev) => ({ ...prev, ...data } as any));
+                }}
+              />
+            )}
+          </Card>
+
+          <View className="pb-20 my-12 mb-12">
             {/* Added padding-bottom for the submit button */}
             <TouchableOpacity
               className={`bg-blue-600 py-4 rounded-xl shadow-lg active:scale-95 ${loading ? 'opacity-60' : ''}`}
@@ -726,7 +671,9 @@ export default function AgentTab({ id }: { id?: string }) {
     }
   });
 
-  const { createAgent, editAgent, deleteAgent } = useAgent();
+  const { createAgent, editAgent, deleteAgent, saveAgentPrizeConfig, updateAgentPrizeConfig } = useAgent();
+  const [editPrizeConfig, setEditPrizeConfig] = useState<any>(null);
+  const [loadingPrizeConfig, setLoadingPrizeConfig] = useState(false);
 
   // Filter agents based on search
   const filteredAgents = agents.filter(agent => {
@@ -766,23 +713,51 @@ export default function AgentTab({ id }: { id?: string }) {
 
   // Enhanced handleCreate and handleEdit to handle API errors
   const handleCreate = (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => {
+    const { _prizeConfig, _isPrizeSet, _hadPrizeConfig, ...agentData } = data;
     setLoading(true)
-    createAgent(data, {
-      onSuccess: () => {
-        setShowForm(false);
-        refetch()
-        setLoading(false)
+    createAgent(agentData, {
+      onSuccess: (newAgent: any) => {
+        if (_isPrizeSet && _prizeConfig) {
+          saveAgentPrizeConfig(
+            { agent: newAgent.id, ..._prizeConfig },
+            {
+              onSuccess: () => {
+                setShowForm(false);
+                refetch();
+                setLoading(false);
+              },
+              onError: (err: any) => {
+                setLoading(false);
+                // Stay on form and show prize config errors
+                let errorData = err?.response?.data ?? err?.message ?? err;
+                if (errorData && typeof errorData === "object" && "message" in errorData) {
+                  errorData = errorData.message;
+                }
+                if (errorData && typeof errorData === "object") {
+                  const apiErrors = parseApiErrors(errorData);
+                  setApiErrors(apiErrors);
+                  setGeneralError("Agent created but prize config has errors. Please fix and update.");
+                } else {
+                  setGeneralError("Agent created but prize config failed to save.");
+                }
+                // Refetch so the new agent shows up, but keep form open for prize fix
+                refetch();
+              },
+            }
+          );
+        } else {
+          setShowForm(false);
+          refetch();
+          setLoading(false);
+        }
       },
       onError: (err: any) => {
-        console.log('errss', err);
-
-        setLoading(false)
+        setLoading(false);
         let errorData = err?.response?.data ?? err?.message ?? err;
 
-        console.log('errorData', errorData);
-
         if (Array.isArray(errorData) && errorData.length) {
-          Alert.alert('Error', errorData?.[0]?.toString())
+          setGeneralError(errorData[0]?.toString());
+          return;
         }
 
         // Special handling for error shape: { message: [ ... ], status: 400 }
@@ -792,18 +767,17 @@ export default function AgentTab({ id }: { id?: string }) {
           Array.isArray(errorData.message) &&
           errorData.status === 400
         ) {
-          console.log('in');
-          Alert.alert(errorData.message.join(" "));
+          setGeneralError(errorData.message.join(" "));
           return;
         }
 
         // If errorData is an object with a "message" key, use that as the error object
         if (errorData && typeof errorData === "object" && "message" in errorData) {
           if (Array.isArray(errorData.message)) {
-            Alert.alert(errorData.message.join(" "));
+            setGeneralError(errorData.message.join(" "));
             return;
           } else if (typeof errorData.message === "string") {
-            Alert.alert(errorData.message);
+            setGeneralError(errorData.message);
             return;
           }
           errorData = errorData.message;
@@ -816,24 +790,11 @@ export default function AgentTab({ id }: { id?: string }) {
 
           // Handle non_field_errors or general error messages
           if (errorData.non_field_errors) {
-            // Special handling for "Agent with this calculate_str already exists."
-            if (
-              Array.isArray(errorData.non_field_errors) &&
-              errorData.non_field_errors.includes("Agent with this calculate_str already exists.")
-            ) {
-              Alert.alert(
-                "Error",
-                "Agent with this calculate_str already exists."
-              );
-              // setGeneralError("Agent with this calculate_str already exists.");
-              return;
-            } else {
-              setGeneralError(
-                Array.isArray(errorData.non_field_errors)
-                  ? errorData.non_field_errors.join(" ")
-                  : String(errorData.non_field_errors)
-              );
-            }
+            setGeneralError(
+              Array.isArray(errorData.non_field_errors)
+                ? errorData.non_field_errors.join(" ")
+                : String(errorData.non_field_errors)
+            );
           }
         } else if (typeof errorData === "string") {
           setGeneralError(errorData);
@@ -845,15 +806,16 @@ export default function AgentTab({ id }: { id?: string }) {
   };
 
   const handleEdit = (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => {
+    const { _prizeConfig, _isPrizeSet, _hadPrizeConfig, ...restData } = data;
 
-    // if (!data?.password) {
-    //   delete data.password
-    // }
+    if (!restData?.password) {
+      delete restData.password
+    }
 
     setLoading(true)
 
     // Fix: If assigned_dealer is an object, extract its id
-    let assigned_dealer = data.assigned_dealer;
+    let assigned_dealer = restData.assigned_dealer;
     if (assigned_dealer && typeof assigned_dealer === "object" && "id" in assigned_dealer) {
       assigned_dealer = assigned_dealer.id;
     }
@@ -861,17 +823,49 @@ export default function AgentTab({ id }: { id?: string }) {
     assigned_dealer = Number(assigned_dealer);
 
     editAgent(
-      { ...data, id: editData?.id, assigned_dealer },
+      { ...restData, id: editData?.id, assigned_dealer },
       {
         onSuccess: () => {
-          setShowForm(false);
-          refetch()
-          setEditData(null);
-          setLoading(false)
+          if (_isPrizeSet && _prizeConfig) {
+            const savePrizeFn = _hadPrizeConfig ? updateAgentPrizeConfig : saveAgentPrizeConfig;
+            const prizePayload = _hadPrizeConfig
+              ? { agentId: editData?.id, ..._prizeConfig }
+              : { agent: editData?.id, ..._prizeConfig };
+            savePrizeFn(prizePayload, {
+              onSuccess: () => {
+                setShowForm(false);
+                refetch();
+                setEditData(null);
+                setEditPrizeConfig(null);
+                setLoading(false);
+              },
+              onError: (err: any) => {
+                setLoading(false);
+                // Stay on form and show prize config errors
+                let errorData = err?.response?.data ?? err?.message ?? err;
+                if (errorData && typeof errorData === "object" && "message" in errorData) {
+                  errorData = errorData.message;
+                }
+                if (errorData && typeof errorData === "object") {
+                  const apiErrors = parseApiErrors(errorData);
+                  setApiErrors(apiErrors);
+                  setGeneralError("Agent updated but prize config has errors. Please fix and save again.");
+                } else {
+                  setGeneralError("Agent updated but prize config failed to save.");
+                }
+              },
+            });
+          } else {
+            setShowForm(false);
+            refetch();
+            setEditData(null);
+            setEditPrizeConfig(null);
+            setLoading(false);
+          }
         },
         onError: (err: any) => {
           setLoading(false);
-          // Handle error response for agent edit
+          // Handle error response for agent edit — stay on form
           let errorData = err?.response?.data ?? err?.message ?? err;
           // If errorData is an object with a "message" key, use that as the error object
           if (errorData && typeof errorData === "object" && "message" in errorData) {
@@ -883,25 +877,13 @@ export default function AgentTab({ id }: { id?: string }) {
             typeof errorData === "string" &&
             (errorData.includes("<html") || errorData.includes("<!DOCTYPE"))
           ) {
-            Alert.alert('Alert', "Something went wrong. Please try again.");
+            setGeneralError("Something went wrong. Please try again.");
             return;
           }
 
           if (errorData && typeof errorData === "object") {
             const apiErrors = parseApiErrors(errorData);
             setApiErrors(apiErrors);
-
-            // Special handling for "Agent with this calculate_str already exists."
-            if (
-              Array.isArray(errorData.non_field_errors) &&
-              errorData.non_field_errors.includes("Agent with this calculate_str already exists.")
-            ) {
-              Alert.alert(
-                "Error",
-                "Agent with this calculate_str already exists."
-              );
-              return;
-            }
 
             // Handle non_field_errors or general error messages
             if (errorData.non_field_errors) {
@@ -912,8 +894,6 @@ export default function AgentTab({ id }: { id?: string }) {
               );
             } else if (typeof errorData.detail === "string") {
               setGeneralError(errorData.detail);
-            } else if (typeof errorData === "string") {
-              setGeneralError(errorData);
             }
           } else if (typeof errorData === "string") {
             setGeneralError(errorData);
@@ -974,15 +954,26 @@ export default function AgentTab({ id }: { id?: string }) {
     }
   };
 
+  if (loadingPrizeConfig) {
+    return (
+      <View className="flex-1 justify-center items-center bg-gray-50">
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text className="text-gray-500 mt-4 font-medium">Loading...</Text>
+      </View>
+    );
+  }
+
   if (showForm) {
     return (
       <AgentForm
         onSubmit={editData ? handleEdit : handleCreate}
         defaultValues={editData || {}}
         loading={loading}
+        prizeConfig={editPrizeConfig}
         onCancel={() => {
           setShowForm(false);
           setEditData(null);
+          setEditPrizeConfig(null);
         }}
       />
     );
@@ -1014,6 +1005,7 @@ export default function AgentTab({ id }: { id?: string }) {
               (user?.user_type === "DEALER") && <TouchableOpacity
                 onPress={() => {
                   setEditData(null);
+                  setEditPrizeConfig(null);
                   setShowForm(true);
                 }}
                 className="w-16 h-16 bg-blue-600 rounded-full shadow-xl items-center justify-center active:scale-95"
@@ -1150,15 +1142,25 @@ export default function AgentTab({ id }: { id?: string }) {
                     ? item.assigned_dealer.id
                     : item.assigned_dealer,
               }}
-              onEdit={() => {
+              onEdit={async () => {
                 // Fix: If assigned_dealer is an object, extract its id for the form
-                setEditData({
+                const agentForEdit = {
                   ...item,
                   assigned_dealer:
                     typeof item.assigned_dealer === "object" && item.assigned_dealer !== null && "id" in item.assigned_dealer
                       ? item.assigned_dealer.id
                       : item.assigned_dealer,
-                });
+                };
+                setEditData(agentForEdit);
+                // Fetch existing prize config
+                setLoadingPrizeConfig(true);
+                try {
+                  const res = await api.get(`/agent/prize-configuration/${item.id}/`);
+                  setEditPrizeConfig(res.data);
+                } catch {
+                  setEditPrizeConfig(null);
+                }
+                setLoadingPrizeConfig(false);
                 setShowForm(true);
               }}
               onDelete={() => handleDelete(item.id.toString())}

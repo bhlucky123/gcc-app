@@ -34,83 +34,107 @@ type LimitCount = {
     dealer_details?: { id: number; username: string; user_type?: string } | null;
 };
 
-// Memoized item to avoid hook error and unnecessary re-renders
-const LimitCountItem = memo(
+// Full-width pill tab
+const PillTabs = ({
+    options,
+    selected,
+    onSelect,
+    disabled,
+}: {
+    options: { value: string; label: string }[];
+    selected: string;
+    onSelect: (value: string) => void;
+    disabled?: boolean;
+}) => (
+    <View className="flex-row gap-2">
+        {options.map((opt) => {
+            const active = selected === opt.value;
+            return (
+                <TouchableOpacity
+                    key={opt.value}
+                    onPress={() => onSelect(opt.value)}
+                    disabled={disabled}
+                    activeOpacity={0.7}
+                    className={`flex-1 py-2.5 rounded-lg items-center ${active ? "bg-blue-600" : "bg-white border border-gray-200"}`}
+                >
+                    <Text className={`text-sm font-bold ${active ? "text-white" : "text-gray-600"}`}>
+                        {opt.label}
+                    </Text>
+                </TouchableOpacity>
+            );
+        })}
+    </View>
+);
+
+// Table row item
+const LimitCountRow = memo(
     ({
         item,
         updateLimitMutation,
-        deleteLimitMutation,
         onDeletePress,
+        showDealer,
     }: {
         item: LimitCount;
         updateLimitMutation: any;
-        deleteLimitMutation: any;
         onDeletePress: (item: LimitCount) => void;
+        showDealer: boolean;
     }) => {
         const [editCount, setEditCount] = useState(item.count.toString());
         const [isEditing, setIsEditing] = useState(false);
 
-        // For range, show the range as a string
         const displayNumber =
             item.limit_type === "range"
-                ? `${item.range_start} - ${item.range_end}`
+                ? `${item.range_start}-${item.range_end}`
                 : item.number;
 
-        // Show number type if available (single/double/triple)
-        const displayNumberType =
-            item.number_type
-                ? {
-                    single_digit: "Single Digit",
-                    double_digit: "Double Digit",
-                    triple_digit: "Triple Digit",
-                  }[item.number_type]
-                : undefined;
+        const typeLabel = item.number_type
+            ? { single_digit: "1D", double_digit: "2D", triple_digit: "3D" }[item.number_type]
+            : "";
 
         return (
-            <View className="bg-white rounded-xl mb-3 shadow shadow-black/10">
-                <View className="flex-row items-end py-4 px-4">
-                    <View className="flex-1">
-                        <Text className="text-xs text-blue-gray-400 font-medium mb-0.5 tracking-tight">
-                            {item.limit_type === "range" ? "Range" : "Number"}
+            <View className="flex-row items-center border-b border-gray-100 bg-white px-4 py-4"
+                style={{ minHeight: 56 }}
+            >
+                {/* Number — takes all available space */}
+                <View className="flex-1 mr-3">
+                    <Text className="text-lg font-bold text-gray-900">{displayNumber}</Text>
+                </View>
+                {/* Type */}
+                <View style={{ width: 40 }}>
+                    <Text className="text-sm font-semibold text-gray-500">{typeLabel}</Text>
+                </View>
+                {/* Dealer */}
+                {showDealer && (
+                    <View className="flex-1 mr-3" style={{ minWidth: 60 }}>
+                        <Text className="text-sm text-gray-500" numberOfLines={1}>
+                            {item.dealer_details?.username || "—"}
                         </Text>
-                        <Text className="text-xl text-blue-gray-900 font-bold tracking-wide">
-                            {displayNumber}
-                        </Text>
-                        {displayNumberType && (
-                            <Text className="text-xs text-blue-600 font-semibold mt-0.5">
-                                {displayNumberType}
-                            </Text>
-                        )}
-                        {item.dealer_details?.username && (
-                            <Text className="text-xs text-blue-gray-500 font-medium mt-0.5">
-                                Dealer: {item.dealer_details.username}
-                            </Text>
-                        )}
                     </View>
-                    <View className="flex-1">
-                        <Text className="text-xs text-blue-gray-400 font-medium mb-0.5 tracking-tight">
-                            Count
+                )}
+                {/* Count */}
+                <View style={{ width: 65 }}>
+                    {isEditing ? (
+                        <TextInput
+                            className="text-center text-sm font-bold bg-blue-50 rounded-lg px-2 py-2 border border-blue-200"
+                            style={{ color: "#1D4ED8" }}
+                            value={editCount}
+                            onChangeText={setEditCount}
+                            keyboardType="number-pad"
+                            autoFocus
+                            returnKeyType="done"
+                        />
+                    ) : (
+                        <Text className="text-lg font-bold text-green-600 text-center">
+                            {item.count}
                         </Text>
-                        {isEditing ? (
-                            <TextInput
-                                className="text-lg text-blue-600 font-semibold bg-blue-50 rounded px-2 py-1 border border-blue-100 min-w-[60px]"
-                                value={editCount}
-                                onChangeText={setEditCount}
-                                keyboardType="number-pad"
-                                placeholder="Count"
-                                placeholderTextColor="#b0b0b0"
-                                returnKeyType="done"
-                            />
-                        ) : (
-                            <Text className="text-xl text-blue-600 font-bold tracking-wide">
-                                {item.count}
-                            </Text>
-                        )}
-                    </View>
-                    <View className="flex-row items-center ml-2 space-x-1.5">
-                        {isEditing ? (
+                    )}
+                </View>
+                {/* Actions */}
+                <View style={{ width: 80 }} className="flex-row justify-end gap-2">
+                    {isEditing ? (
+                        <>
                             <TouchableOpacity
-                                className="bg-green-500 py-2 px-4 rounded justify-center items-center mr-0.5"
+                                className="bg-green-500 px-3 py-2 rounded-lg"
                                 onPress={() => {
                                     const countNum = parseInt(editCount, 10);
                                     if (isNaN(countNum) || countNum < 0) {
@@ -129,44 +153,55 @@ const LimitCountItem = memo(
                                         range_start: item.range_start ?? "",
                                         range_end: item.range_end ?? "",
                                         number: item.number ?? "",
-                                        number_type: item?.number_type || "single_digit" // fallback
+                                        number_type: item?.number_type || "single_digit"
                                     });
                                     setIsEditing(false);
                                 }}
+                                activeOpacity={0.7}
                             >
-                                <Text className="text-white font-bold text-base tracking-tight">
-                                    Save
-                                </Text>
+                                <Text className="text-white font-bold text-sm">OK</Text>
                             </TouchableOpacity>
-                        ) : (
                             <TouchableOpacity
-                                className="bg-blue-50 py-1.5 px-4 rounded border border-blue-100 justify-center items-center mr-0.5"
-                                onPress={() => setIsEditing(true)}
+                                className="bg-gray-200 px-3 py-2 rounded-lg"
+                                onPress={() => {
+                                    setEditCount(item.count.toString());
+                                    setIsEditing(false);
+                                }}
+                                activeOpacity={0.7}
                             >
-                                <Text className="text-blue-600 font-bold text-base tracking-tight">
-                                    Edit
-                                </Text>
+                                <Text className="text-gray-500 font-bold text-sm">X</Text>
                             </TouchableOpacity>
-                        )}
-                        <TouchableOpacity
-                            className="bg-red-50 py-1.5 px-3 rounded border border-red-100 justify-center items-center"
-                            onPress={() => onDeletePress(item)}
-                        >
-                            <Text className="text-red-500 font-black text-lg tracking-tight">✕</Text>
-                        </TouchableOpacity>
-                    </View>
+                        </>
+                    ) : (
+                        <>
+                            <TouchableOpacity
+                                className="bg-gray-100 px-3 py-2 rounded-lg"
+                                onPress={() => setIsEditing(true)}
+                                activeOpacity={0.7}
+                            >
+                                <Text className="text-gray-700 font-semibold text-sm">Edit</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                className="bg-red-50 px-2.5 py-2 rounded-lg"
+                                onPress={() => onDeletePress(item)}
+                                activeOpacity={0.7}
+                            >
+                                <Text className="text-red-500 font-bold text-base leading-none">✕</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
                 </View>
             </View>
         );
     }
 );
 
-// API path: admin uses limit-number-count, dealer uses dealer-limit-number-count
+// API path
 const LIMIT_API_BASE =
     (userType: string | undefined) =>
-    userType === "DEALER"
-        ? "/draw/dealer-limit-number-count"
-        : "/draw/limit-number-count";
+        userType === "DEALER"
+            ? "/draw/dealer-limit-number-count"
+            : "/draw/limit-number-count";
 
 const LimitCountScreen = () => {
     const { user } = useAuthStore();
@@ -174,15 +209,10 @@ const LimitCountScreen = () => {
     const queryClient = useQueryClient();
     const apiBase = LIMIT_API_BASE(user?.user_type);
 
-    // UI state for adding new limit
     const [limitType, setLimitType] = useState<"single_number" | "range">("single_number");
     const [numberType, setNumberType] = useState<"single_digit" | "double_digit" | "triple_digit">("single_digit");
-
-    // Filter for list by number_type
     const [filterNumberType, setFilterNumberType] = useState<"all" | "single_digit" | "double_digit" | "triple_digit">("all");
-    // Dealer filter for list (admin only)
     const [filterDealerId, setFilterDealerId] = useState<number | "">("");
-    // Selected dealer when creating (admin only) - null = global limit
     const [selectedDealerForCreate, setSelectedDealerForCreate] = useState<number | null>(null);
 
     const { data: dealers = [] as Dealer[] } = useQuery<Dealer[]>({
@@ -249,13 +279,12 @@ const LimitCountScreen = () => {
             setNewCount("");
             setIsSubmitting(false);
             clearValidation();
-            ToastAndroid.show("Limit count added successfully.", ToastAndroid.SHORT);
+            ToastAndroid.show("Limit added.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             setIsSubmitting(false);
             console.log("err", err);
 
-            // Handle dealer-specific config error inline
             const dealerError =
                 err?.response?.data?.message?.dealer?.[0] ||
                 err?.message?.dealer?.[0];
@@ -295,8 +324,6 @@ const LimitCountScreen = () => {
             number: string;
             number_type: "single_digit" | "double_digit" | "triple_digit"
         }) => {
-            // PATCH only count, but keep other info for UI
-            // Pass number_type, even if UI only PATCHes `count`
             return api.patch(`/draw/limit-number-count/${payload.id}/`, {
                 count: payload.count,
             });
@@ -305,7 +332,7 @@ const LimitCountScreen = () => {
             queryClient.invalidateQueries({
                 queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
             });
-            ToastAndroid.show("Limit count updated.", ToastAndroid.SHORT);
+            ToastAndroid.show("Limit updated.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             Dialog.show({
@@ -325,7 +352,7 @@ const LimitCountScreen = () => {
             queryClient.invalidateQueries({
                 queryKey: [apiBase, selectedDraw?.id],
             });
-            ToastAndroid.show("Limit count deleted.", ToastAndroid.SHORT);
+            ToastAndroid.show("Limit deleted.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             Dialog.show({
@@ -337,7 +364,6 @@ const LimitCountScreen = () => {
         },
     });
 
-    // Delete confirmation modal
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [deleteItem, setDeleteItem] = useState<LimitCount | null>(null);
 
@@ -359,7 +385,6 @@ const LimitCountScreen = () => {
         setDeleteItem(null);
     }, []);
 
-    // Utility to get digit length
     const getDigitsForType = (type: "single_digit" | "double_digit" | "triple_digit") => {
         switch (type) {
             case "single_digit": return 1;
@@ -369,12 +394,10 @@ const LimitCountScreen = () => {
         }
     };
 
-    // Filter input so that only up-to-N digits can be entered, and numbers only
     const onSetNewNumber = (text: string) => {
         clearValidation();
         let onlyDigits = text.replace(/\D/g, "");
-        const maxLen = getDigitsForType(numberType);
-        setNewNumber(onlyDigits.slice(0, maxLen));
+        setNewNumber(onlyDigits.slice(0, getDigitsForType(numberType)));
     };
 
     const onSetNewRangeStart = (text: string) => {
@@ -402,19 +425,19 @@ const LimitCountScreen = () => {
         }
         const countNum = parseInt(newCount, 10);
 
-        if(!newNumber?.trim() && limitType === "single_number") {
+        if (!newNumber?.trim() && limitType === "single_number") {
             setValidationError("Number is required.");
             setErrorFields(["number"]);
             return;
         }
 
-        if(!newRangeStart?.trim() && limitType === "range") {
+        if (!newRangeStart?.trim() && limitType === "range") {
             setValidationError("Range start is required.");
             setErrorFields(["rangeStart"]);
             return;
         }
 
-        if(!newRangeEnd?.trim() && limitType === "range") {
+        if (!newRangeEnd?.trim() && limitType === "range") {
             setValidationError("Range end is required.");
             setErrorFields(["rangeEnd"]);
             return;
@@ -448,7 +471,6 @@ const LimitCountScreen = () => {
                 dealer: user?.user_type === "ADMIN" ? selectedDealerForCreate : undefined,
             });
         } else {
-            // range
             const trimmedStart = newRangeStart.trim();
             const trimmedEnd = newRangeEnd.trim();
             const requiredDigits = getDigitsForType(numberType);
@@ -482,415 +504,280 @@ const LimitCountScreen = () => {
         }
     };
 
-    // --- Better styled Multi-level Tabs ---
-    const tabColors = {
-        activeBg: "bg-blue-600",
-        inactiveBg: "bg-white",
-        activeText: "text-white",
-        inactiveText: "text-blue-600",
-        border: "border border-blue-200",
-        rounded: "rounded-full",
-        shadow: "shadow shadow-blue-600/10"
-    };
+    const borderColor = (hasError: boolean) => hasError ? "#EF4444" : "#E5E7EB";
 
-    // Top-level: Single/Double/Triple digit tab
-    // Reduced size: less padding, smaller font, tighter radii/margins
+    const isAdmin = user?.user_type === "ADMIN";
 
-    const NumberTypeTabs = () => (
-        <View className="flex-row justify-center my-2">
-            <View
-                style={{
-                    flexDirection: "row",
-                    backgroundColor: "#EFF6FF",
-                    borderRadius: 20,
-                    padding: 2,
-                    shadowColor: "#3B82F6",
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 4,
-                    elevation: 3,
-                }}
-            >
-                {(["single_digit", "double_digit", "triple_digit"] as const).map((type, idx, arr) => {
-                    const selected = numberType === type;
-                    const roundedLeft = idx === 0 ? 14 : 6;
-                    const roundedRight = idx === arr.length-1 ? 14 : 6;
-                    return (
-                        <TouchableOpacity
-                            key={type}
-                            className={[
-                                "mx-0.5",
-                                selected ? "bg-blue-500" : "bg-white",
-                            ].join(" ")}
-                            style={{
-                                paddingHorizontal: 12,
-                                paddingVertical: 5,
-                                borderTopLeftRadius: roundedLeft,
-                                borderBottomLeftRadius: roundedLeft,
-                                borderTopRightRadius: roundedRight,
-                                borderBottomRightRadius: roundedRight,
-                                marginLeft: idx === 0 ? 0 : 2,
-                                marginRight: idx === arr.length-1 ? 0 : 2,
-                                borderWidth: selected ? 0 : 1,
-                                borderColor: selected ? "#2563eb" : "#c7d5fa",
-                                elevation: selected ? 2 : 0,
-                                shadowColor: selected ? "#2563eb" : undefined,
-                                shadowOpacity: selected ? 0.08 : 0,
-                                shadowRadius: selected ? 4 : 0,
-                            }}
-                            activeOpacity={0.9}
-                            onPress={() => {
-                                clearValidation();
-                                setNumberType(type);
-                                setNewNumber("");
-                                setNewRangeStart("");
-                                setNewRangeEnd("");
-                            }}
-                            disabled={isSubmitting}
-                        >
-                            <Text
-                                className={[
-                                    "font-bold text-[13px]",
-                                    selected ? "text-white" : "text-blue-600",
-                                ].join(" ")}
-                                style={{
-                                    letterSpacing: 1,
-                                    color: selected ? "#fff" : "#2563eb"
-                                }}
-                            >
-                                {type === "single_digit"
-                                    ? "Single Digit"
-                                    : type === "double_digit"
-                                        ? "Double Digit"
-                                        : "Triple Digit"}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-        </View>
-    );
-
-    // 2nd-level: single number / range tab
-    const LimitTypeTabs = () => (
-        <View className="flex-row justify-center my-2">
-            {(["single_number", "range"] as const).map((type, idx, arr) => (
-                <TouchableOpacity
-                    key={type}
-                    className={[
-                        "px-5 py-2 mx-0.5",
-                        tabColors.rounded,
-                        tabColors.shadow,
-                        tabColors.border,
-                        limitType === type ? "bg-blue-500" : "bg-blue-100",
-                        idx === 0 ? "ml-0" : "",
-                        idx === arr.length - 1 ? "mr-0" : ""
-                    ].join(" ")}
-                    style={{
-                        borderTopLeftRadius: idx === 0 ? 22 : 10,
-                        borderBottomLeftRadius: idx === 0 ? 22 : 10,
-                        borderTopRightRadius: idx === arr.length - 1 ? 22 : 10,
-                        borderBottomRightRadius: idx === arr.length - 1 ? 22 : 10,
-                        elevation: limitType === type ? 2 : 0
-                    }}
-                    onPress={() => {
-                        clearValidation();
-                        setLimitType(type);
-                        setNewNumber(""); setNewRangeStart(""); setNewRangeEnd("");
-                    }}
-                    disabled={isSubmitting}
-                >
-                    <Text
-                        className={[
-                            "font-bold text-base tracking-tight",
-                            limitType === type ? "text-white" : "text-blue-600"
-                        ].join(" ")}
-                        style={{letterSpacing: 1}}
-                    >
-                        {type === "single_number" ? "Single Number" : "Range"}
-                    </Text>
-                </TouchableOpacity>
-            ))}
-        </View>
-    );
-
-    // Dealer filter for list (admin only)
-    const DealerFilter = () =>
-        user?.user_type === "ADMIN" ? (
-            <View style={{ width: "100%", marginBottom: 10 }}>
-                <Text className="text-xs text-blue-gray-500 font-medium mb-1">Filter by dealer</Text>
+    const renderHeader = () => (
+        <View className="bg-white rounded-lg p-4 mb-3 border border-gray-100">
+            {/* Dealer (admin only) */}
+            {isAdmin && (
                 <Dropdown
-                    data={[{ label: "All dealers", value: "" }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
+                    data={[{ label: "Global (all dealers)", value: null }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
                     labelField="label"
                     valueField="value"
-                    value={filterDealerId}
-                    placeholder="All dealers"
-                    onChange={(item: { value: number | "" }) => setFilterDealerId(item.value)}
+                    value={selectedDealerForCreate}
+                    placeholder="Select dealer"
+                    onChange={(item: { value: number | null }) => {
+                        clearValidation();
+                        setSelectedDealerForCreate(item.value);
+                    }}
                     style={{
-                        borderColor: "#c7d5fa",
                         borderWidth: 1,
+                        borderColor: borderColor(errorFields.includes("dealer")),
                         borderRadius: 8,
                         paddingHorizontal: 12,
                         paddingVertical: 10,
                         backgroundColor: "#fff",
+                        marginBottom: 10,
                     }}
-                    selectedTextStyle={{ color: "#1e293b", fontSize: 14 }}
-                    itemTextStyle={{ color: "#1e293b", fontSize: 14 }}
+                    selectedTextStyle={{ color: "#1F2937", fontSize: 14 }}
+                    itemTextStyle={{ color: "#1F2937", fontSize: 14 }}
+                    placeholderStyle={{ color: "#9CA3AF", fontSize: 14 }}
+                />
+            )}
+
+            {/* Number type */}
+            <View className="mb-3">
+                <PillTabs
+                    options={[
+                        { value: "single_digit", label: "1 Digit" },
+                        { value: "double_digit", label: "2 Digit" },
+                        { value: "triple_digit", label: "3 Digit" },
+                    ]}
+                    selected={numberType}
+                    onSelect={(v) => {
+                        clearValidation();
+                        setNumberType(v as any);
+                        setNewNumber("");
+                        setNewRangeStart("");
+                        setNewRangeEnd("");
+                    }}
+                    disabled={isSubmitting}
                 />
             </View>
-        ) : null;
 
-    // Filter tabs for list
-    const FilterTabs = () => (
-        <View style={{ width: "100%", marginBottom: 12 }}>
-            <View
-                style={{
-                    width: "100%",
-                    flexDirection: "row",
-                    backgroundColor: "#EFF6FF",
-                    borderRadius: 12,
-                    padding: 4,
-                }}
-            >
-                {(["all", "single_digit", "double_digit", "triple_digit"] as const).map((type) => {
-                    const selected = filterNumberType === type;
-                    return (
-                        <TouchableOpacity
-                            key={type}
-                            style={{
-                                flex: 1,
-                                paddingVertical: 10,
-                                marginHorizontal: 2,
-                                borderRadius: 10,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: selected ? "#3B82F6" : "transparent",
-                            }}
-                            onPress={() => setFilterNumberType(type)}
-                            disabled={isLoading}
-                        >
-                            <Text
-                                style={{
-                                    fontSize: 14,
-                                    fontWeight: "600",
-                                    color: selected ? "#FFFFFF" : "#2563EB",
-                                }}
-                            >
-                                {type === "all"
-                                    ? "All"
-                                    : type === "single_digit"
-                                        ? "Single"
-                                        : type === "double_digit"
-                                            ? "Double"
-                                            : "Triple"}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
+            {/* Limit type */}
+            <View className="mb-3">
+                <PillTabs
+                    options={[
+                        { value: "single_number", label: "Number" },
+                        { value: "range", label: "Range" },
+                    ]}
+                    selected={limitType}
+                    onSelect={(v) => {
+                        clearValidation();
+                        setLimitType(v as any);
+                        setNewNumber("");
+                        setNewRangeStart("");
+                        setNewRangeEnd("");
+                    }}
+                    disabled={isSubmitting}
+                />
             </View>
-        </View>
-    );
 
-    const renderHeader = () => (
-        <View>
-            <View className="bg-white rounded-xl p-4 mb-4 shadow shadow-black/10">
-                <Text className="text-base font-semibold text-blue-600 mb-1 tracking-tight">
-                    Add Limit
-                </Text>
-                {user?.user_type === "ADMIN" && (
-                    <View className="mb-3">
-                        <Text className="text-xs text-blue-gray-400 font-medium mb-1 tracking-tight">
-                            Dealer (optional - leave empty for global)
-                        </Text>
-                        <Dropdown
-                            data={[{ label: "Global (all dealers)", value: null }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
-                            labelField="label"
-                            valueField="value"
-                            value={selectedDealerForCreate}
-                            placeholder="Select dealer"
-                            onChange={(item: { value: number | null }) => {
-                                clearValidation();
-                                setSelectedDealerForCreate(item.value);
-                            }}
-                            style={{
-                                borderColor: errorFields.includes("dealer") ? "#DC2626" : "#c7d5fa",
-                                borderWidth: 1,
-                                borderRadius: 8,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                backgroundColor: "#fff",
-                            }}
-                            selectedTextStyle={{ color: "#1e293b", fontSize: 14 }}
-                            itemTextStyle={{ color: "#1e293b", fontSize: 14 }}
-                        />
-                    </View>
-                )}
-                <NumberTypeTabs />
-                <LimitTypeTabs />
-
-                <View className="flex-row items-end space-x-2 mt-2">
-                    {limitType === "single_number" ? (
-                        <>
-                            <View className="flex-1">
-                                <Text className="text-xs text-blue-gray-400 font-medium mb-1 tracking-tight">
-                                    Number
-                                </Text>
-                                <TextInput
-                                    className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: errorFields.includes("number") ? "#DC2626" : "#C7D2FE",
-                                    }}
-                                    placeholder="Number"
-                                    value={newNumber}
-                                    onChangeText={onSetNewNumber}
-                                    keyboardType="number-pad"
-                                    editable={!isSubmitting}
-                                    placeholderTextColor="#b0b0b0"
-                                    maxLength={getDigitsForType(numberType)}
-                                    returnKeyType="next"
-                                />
-                            </View>
-                        </>
-                    ) : (
-                        <>
-                            <View className="flex-1">
-                                <Text className="text-xs text-blue-gray-400 font-medium mb-1 tracking-tight">
-                                    Range Start
-                                </Text>
-                                <TextInput
-                                    className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: errorFields.includes("rangeStart") ? "#DC2626" : "#C7D2FE",
-                                    }}
-                                    placeholder="Start"
-                                    value={newRangeStart}
-                                    onChangeText={onSetNewRangeStart}
-                                    keyboardType="number-pad"
-                                    editable={!isSubmitting}
-                                    placeholderTextColor="#b0b0b0"
-                                    maxLength={getDigitsForType(numberType)}
-                                    returnKeyType="next"
-                                />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-xs text-blue-gray-400 font-medium mb-1 tracking-tight">
-                                    Range End
-                                </Text>
-                                <TextInput
-                                    className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: errorFields.includes("rangeEnd") ? "#DC2626" : "#C7D2FE",
-                                    }}
-                                    placeholder="End"
-                                    value={newRangeEnd}
-                                    onChangeText={onSetNewRangeEnd}
-                                    keyboardType="number-pad"
-                                    editable={!isSubmitting}
-                                    placeholderTextColor="#b0b0b0"
-                                    maxLength={getDigitsForType(numberType)}
-                                    returnKeyType="next"
-                                />
-                            </View>
-                        </>
-                    )}
-                    <View className="flex-1">
-                        <Text className="text-xs text-blue-gray-400 font-medium mb-1 tracking-tight">
-                            Count
-                        </Text>
+            {/* Inputs row */}
+            <View className="flex-row items-end gap-2 mb-3">
+                {limitType === "single_number" ? (
+                    <TextInput
+                        className="flex-1 bg-white rounded-lg px-3 py-3 text-base text-gray-900"
+                        style={{ borderWidth: 1, borderColor: borderColor(errorFields.includes("number")) }}
+                        placeholder="Number"
+                        value={newNumber}
+                        onChangeText={onSetNewNumber}
+                        keyboardType="number-pad"
+                        editable={!isSubmitting}
+                        placeholderTextColor="#9CA3AF"
+                        maxLength={getDigitsForType(numberType)}
+                    />
+                ) : (
+                    <>
                         <TextInput
-                            className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
-                            style={{
-                                borderWidth: 1,
-                                borderColor: errorFields.includes("count") ? "#DC2626" : "#C7D2FE",
-                            }}
-                            placeholder="Count"
-                            value={newCount}
-                            onChangeText={onSetNewCount}
+                            className="flex-1 bg-white rounded-lg px-3 py-3 text-base text-gray-900"
+                            style={{ borderWidth: 1, borderColor: borderColor(errorFields.includes("rangeStart")) }}
+                            placeholder="Start"
+                            value={newRangeStart}
+                            onChangeText={onSetNewRangeStart}
                             keyboardType="number-pad"
                             editable={!isSubmitting}
-                            placeholderTextColor="#b0b0b0"
-                            returnKeyType="done"
+                            placeholderTextColor="#9CA3AF"
+                            maxLength={getDigitsForType(numberType)}
                         />
-                    </View>
-                    <TouchableOpacity
-                        className={`bg-blue-600 py-2 px-3 rounded justify-center items-center min-w-[70px] ml-0.5 shadow shadow-blue-600/20 ${isSubmitting ? "opacity-60" : ""
-                            }`}
-                        onPress={handleAddLimit}
-                        disabled={isSubmitting}
-                    >
-                        <Text className="text-white font-bold text-base tracking-wide">
-                            {isSubmitting ? "Adding..." : "Add"}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-                {validationError && (
-                    <Text className="text-red-600 text-sm font-medium mt-2">
-                        {validationError}
-                    </Text>
+                        <TextInput
+                            className="flex-1 bg-white rounded-lg px-3 py-3 text-base text-gray-900"
+                            style={{ borderWidth: 1, borderColor: borderColor(errorFields.includes("rangeEnd")) }}
+                            placeholder="End"
+                            value={newRangeEnd}
+                            onChangeText={onSetNewRangeEnd}
+                            keyboardType="number-pad"
+                            editable={!isSubmitting}
+                            placeholderTextColor="#9CA3AF"
+                            maxLength={getDigitsForType(numberType)}
+                        />
+                    </>
                 )}
+                <TextInput
+                    className="bg-white rounded-lg px-3 py-3 text-base text-gray-900"
+                    style={{ borderWidth: 1, borderColor: borderColor(errorFields.includes("count")), width: 80 }}
+                    placeholder="Count"
+                    value={newCount}
+                    onChangeText={onSetNewCount}
+                    keyboardType="number-pad"
+                    editable={!isSubmitting}
+                    placeholderTextColor="#9CA3AF"
+                />
             </View>
+
+            {/* Validation error */}
+            {validationError && (
+                <Text className="text-red-500 text-sm mb-2">{validationError}</Text>
+            )}
+
+            {/* Add button — full width */}
+            <TouchableOpacity
+                className={`bg-blue-600 rounded-lg py-3.5 items-center justify-center ${isSubmitting ? "opacity-50" : ""}`}
+                onPress={handleAddLimit}
+                disabled={isSubmitting}
+                activeOpacity={0.8}
+            >
+                {isSubmitting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                    <Text className="text-white font-bold text-base">Add Limit</Text>
+                )}
+            </TouchableOpacity>
         </View>
     );
 
     const renderLimitItem = useCallback(
         ({ item }: { item: LimitCount }) => (
-            <LimitCountItem
+            <LimitCountRow
                 item={item}
                 updateLimitMutation={updateLimitMutation}
-                deleteLimitMutation={deleteLimitMutation}
                 onDeletePress={handleDeletePress}
+                showDealer={isAdmin}
             />
         ),
-        [updateLimitMutation, deleteLimitMutation, handleDeletePress]
+        [updateLimitMutation, handleDeletePress, isAdmin]
+    );
+
+    const TableHeader = () => (
+        <View className="flex-row items-center bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
+            <View className="flex-1 mr-3">
+                <Text className="text-sm font-bold text-gray-500 uppercase">Number</Text>
+            </View>
+            <View style={{ width: 40 }}>
+                <Text className="text-sm font-bold text-gray-500 uppercase">Type</Text>
+            </View>
+            {isAdmin && (
+                <View className="flex-1 mr-3" style={{ minWidth: 60 }}>
+                    <Text className="text-sm font-bold text-gray-500 uppercase">Dealer</Text>
+                </View>
+            )}
+            <View style={{ width: 65 }}>
+                <Text className="text-sm font-bold text-gray-500 uppercase text-center">Count</Text>
+            </View>
+            <View style={{ width: 80 }}>
+                <Text className="text-sm font-bold text-gray-500 uppercase text-right">Actions</Text>
+            </View>
+        </View>
     );
 
     return (
         <KeyboardAvoidingView
-            className="flex-1 bg-blue-50"
+            className="flex-1 bg-gray-50"
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-            <SafeAreaView className="flex-1 p-4  bg-blue-50">
-                {isLoading ? (
-                    <ActivityIndicator size="large" style={{ marginTop: 32 }} color="#2563eb" />
-                ) : error ? (
-                    <Text className="text-red-500 text-center mt-8 text-base font-semibold">
-                        Failed to load limit counts.
-                    </Text>
-                ) : (
-                    <View className="flex-1">
-                        {renderHeader()}
+            <SafeAreaView className="flex-1">
+                {/* Header */}
+                {/* <View className="bg-white px-5 pb-3 border-b border-gray-100"
+                    style={{ paddingTop: Platform.OS === "android" ? 44 : 8 }}
+                >
+                    {selectedDraw && (
+                        <Text className="text-xs text-gray-400 mt-0.5">
+                            Draw: {selectedDraw?.name || `#${selectedDraw?.id}`}
+                        </Text>
+                    )}
+                </View> */}
+
+                <View className="flex-1 px-4 pt-4">
+                    {isLoading ? (
+                        <View className="flex-1 justify-center items-center">
+                            <ActivityIndicator size="large" color="#3B82F6" />
+                        </View>
+                    ) : error ? (
+                        <View className="flex-1 justify-center items-center">
+                            <Text className="text-gray-500 text-sm">Failed to load limit counts.</Text>
+                        </View>
+                    ) : (
                         <FlatList
                             data={limitCounts || []}
                             keyExtractor={(item) => item.id.toString()}
                             renderItem={renderLimitItem}
                             ListHeaderComponent={
                                 <View>
-                                    <DealerFilter />
-                                    <FilterTabs />
-                                    {isFetching && (
-                                        <View className="py-4 items-center">
-                                            <ActivityIndicator size="small" color="#2563eb" />
-                                        </View>
+                                    {renderHeader()}
+
+                                    {/* Filters row */}
+                                    <View className="mb-3">
+                                        <PillTabs
+                                            options={[
+                                                { value: "all", label: "All" },
+                                                { value: "single_digit", label: "1 Digit" },
+                                                { value: "double_digit", label: "2 Digit" },
+                                                { value: "triple_digit", label: "3 Digit" },
+                                            ]}
+                                            selected={filterNumberType}
+                                            onSelect={(v) => setFilterNumberType(v as any)}
+                                            disabled={isLoading}
+                                        />
+                                        {isFetching && (
+                                            <View className="items-center mt-2">
+                                                <ActivityIndicator size="small" color="#3B82F6" />
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {isAdmin && (
+                                        <Dropdown
+                                            data={[{ label: "All dealers", value: "" }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
+                                            labelField="label"
+                                            valueField="value"
+                                            value={filterDealerId}
+                                            placeholder="All dealers"
+                                            onChange={(item: { value: number | "" }) => setFilterDealerId(item.value)}
+                                            style={{
+                                                borderWidth: 1,
+                                                borderColor: "#E5E7EB",
+                                                borderRadius: 6,
+                                                paddingHorizontal: 10,
+                                                paddingVertical: 6,
+                                                backgroundColor: "#fff",
+                                                marginBottom: 8,
+                                            }}
+                                            selectedTextStyle={{ color: "#1F2937", fontSize: 12 }}
+                                            itemTextStyle={{ color: "#1F2937", fontSize: 12 }}
+                                            placeholderStyle={{ color: "#9CA3AF", fontSize: 12 }}
+                                        />
                                     )}
+
+                                    {/* Table header */}
+                                    <TableHeader />
                                 </View>
                             }
                             ListEmptyComponent={
-                                <Text className="text-blue-gray-400 text-center mt-8 text-base font-medium">
-                                    No limit counts found.
-                                </Text>
+                                <View className="items-center py-8 bg-white rounded-b-lg">
+                                    <Text className="text-gray-400 text-xs">No limits found.</Text>
+                                </View>
                             }
-                            contentContainerStyle={{ paddingBottom: 32, flexGrow: 1 }}
-                            style={{ flex: 1 }}
-                            showsVerticalScrollIndicator={true}
+                            contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+                            showsVerticalScrollIndicator={false}
                             keyboardShouldPersistTaps="handled"
                         />
-                    </View>
-                )}
+                    )}
+                </View>
 
-                {/* Delete confirmation modal */}
+                {/* Delete modal */}
                 <Modal
                     visible={deleteModalVisible}
                     transparent
@@ -898,31 +785,25 @@ const LimitCountScreen = () => {
                     onRequestClose={handleDeleteCancel}
                 >
                     <Pressable
-                        className="flex-1 justify-center items-center bg-black/40 px-4"
+                        className="flex-1 justify-center items-center bg-black/40 px-5"
                         onPress={handleDeleteCancel}
                     >
                         <Pressable
-                            className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg"
+                            className="bg-white w-full rounded-2xl p-6"
+                            style={{ maxWidth: 360 }}
                             onPress={(e) => e.stopPropagation()}
                         >
-                            <View className="items-center mb-4">
-                                <View className="w-12 h-12 rounded-full bg-red-100 items-center justify-center mb-3">
-                                    <Text className="text-red-600 text-2xl font-bold">!</Text>
-                                </View>
-                                <Text className="text-xl font-bold text-red-600 text-center">
-                                    Delete Limit
-                                </Text>
-                            </View>
-                            <Text className="text-base text-gray-600 mb-6 text-center">
-                                {deleteItem?.limit_type === "range"
-                                    ? `Are you sure you want to delete the limit for range `
-                                    : "Are you sure you want to delete the limit for number "}
-                                <Text className="font-semibold text-gray-900">
+                            <Text className="text-lg font-bold text-gray-900 text-center mb-2">
+                                Delete Limit
+                            </Text>
+                            <Text className="text-sm text-gray-500 text-center mb-5">
+                                Delete limit for{" "}
+                                <Text className="font-bold text-gray-800">
                                     {deleteItem?.limit_type === "range"
                                         ? `${deleteItem?.range_start ?? ""} - ${deleteItem?.range_end ?? ""}`
                                         : deleteItem?.number ?? ""}
                                 </Text>
-                                ? This action cannot be undone.
+                                ? This cannot be undone.
                             </Text>
                             <View className="flex-row gap-3">
                                 <TouchableOpacity
@@ -930,16 +811,16 @@ const LimitCountScreen = () => {
                                     className="flex-1 bg-gray-100 py-3 rounded-xl items-center"
                                     activeOpacity={0.8}
                                 >
-                                    <Text className="text-gray-700 font-bold text-base">Cancel</Text>
+                                    <Text className="text-gray-600 font-bold text-sm">Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     onPress={handleDeleteConfirm}
-                                    className="flex-1 bg-red-600 py-3 rounded-xl items-center"
+                                    className="flex-1 bg-red-500 py-3 rounded-xl items-center"
                                     activeOpacity={0.8}
                                     disabled={deleteLimitMutation.isPending}
-                                    style={{ opacity: deleteLimitMutation.isPending ? 0.7 : 1 }}
+                                    style={{ opacity: deleteLimitMutation.isPending ? 0.6 : 1 }}
                                 >
-                                    <Text className="text-white font-bold text-base">
+                                    <Text className="text-white font-bold text-sm">
                                         {deleteLimitMutation.isPending ? "Deleting..." : "Delete"}
                                     </Text>
                                 </TouchableOpacity>
