@@ -557,6 +557,69 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
+      // ---------- Set Booking ----------
+      if (selectedRange === "Set" && !isMixedMode) {
+        // Only process if this is the first number (set only makes sense for one number)
+        if (numbers.length > 1) return;
+        if (numberLen !== 3) {
+          Alert.alert(
+            "Invalid",
+            "Set combinations only apply to 3-digit numbers."
+          );
+          return;
+        }
+
+        const padded = num.padStart(3, "0");
+        const digits = padded.split("");
+
+        const generatePermutations = (arr: string[]) => {
+          const result = new Set<string>();
+          const permute = (path: string[], used: boolean[]) => {
+            if (path.length === arr.length) {
+              result.add(path.join(""));
+              return;
+            }
+            for (let i = 0; i < arr.length; i++) {
+              if (used[i]) continue;
+              used[i] = true;
+              permute([...path, arr[i]], [...used]);
+              used[i] = false;
+            }
+          };
+          permute([], Array(arr.length).fill(false));
+          return Array.from(result).filter((num) => num.length === 3);
+        };
+
+        const permutations = generatePermutations(digits);
+        const newEntries: BookingDetail[] = [];
+
+        for (let perm of permutations) {
+          const number = perm;
+          if (subType === "BOTH") {
+            if (countVal > 0) newEntries.push(createEntry(number, countVal, "SUPER", undefined, bookingType));
+            const boxCount = bCountVal > 0 ? bCountVal : countVal;
+            if (boxCount > 0) newEntries.push(createEntry(number, boxCount, "BOX", undefined, bookingType));
+          } else if (subType === "BOX") {
+            const boxCount = bCountVal > 0 ? bCountVal : countVal;
+            if (boxCount > 0) newEntries.push(createEntry(number, boxCount, "BOX", undefined, bookingType));
+          } else if (isDouble && subType === "ALL") {
+            ["AB", "BC", "AC"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk, bookingType));
+            });
+          } else if (isSingle && subType === "ALL") {
+            ["A", "B", "C"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk, bookingType));
+            });
+          } else {
+            if (countVal > 0) newEntries.push(createEntry(number, countVal, subType, undefined, bookingType));
+          }
+        }
+
+        setBookingDetails((prev) => [...newEntries, ...prev]);
+        clearInputs();
+        return;
+      }
+
       // For BOX, only require bCount and must be 3-digit
       if (subType === "BOX") {
         if (num.length !== 3) {
@@ -745,68 +808,6 @@ const BookingScreen: React.FC = () => {
         setEndNumberInput("");
         setBCountInput("");
         setDifferenceInput("");
-        return;
-      }
-
-      // ---------- Set Booking ----------
-      if (selectedRange === "Set" && !isMixedMode) {
-        // Only process if this is the first number (set only makes sense for one number)
-        if (numbers.length > 1) return;
-        if (numberLen !== 3) {
-          Alert.alert(
-            "Invalid",
-            "Set combinations only apply to 3-digit numbers."
-          );
-          return;
-        }
-
-        const padded = num.padStart(3, "0");
-        const digits = padded.split("");
-
-        const generatePermutations = (arr: string[]) => {
-          const result = new Set<string>();
-          const permute = (path: string[], used: boolean[]) => {
-            if (path.length === arr.length) {
-              result.add(path.join(""));
-              return;
-            }
-            for (let i = 0; i < arr.length; i++) {
-              if (used[i]) continue;
-              used[i] = true;
-              permute([...path, arr[i]], [...used]);
-              used[i] = false;
-            }
-          };
-          permute([], Array(arr.length).fill(false));
-          return Array.from(result).filter((num) => num.length === 3);
-        };
-
-        const permutations = generatePermutations(digits);
-        const newEntries: BookingDetail[] = [];
-
-        for (let perm of permutations) {
-          const number = perm;
-          if (subType === "BOTH") {
-            if (countVal > 0) newEntries.push(createEntry(number, countVal, "SUPER", undefined, bookingType));
-            // FIXED: Use bCountVal if > 0, otherwise use countVal for the BOX part.
-            const boxCount = bCountVal > 0 ? bCountVal : countVal;
-            if (boxCount > 0) newEntries.push(createEntry(number, boxCount, "BOX", undefined, bookingType));
-          } else if (isDouble && subType === "ALL") {
-            ["AB", "BC", "AC"].forEach((lsk) => {
-              if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk, bookingType));
-            });
-          } else if (isSingle && subType === "ALL") {
-            ["A", "B", "C"].forEach((lsk) => {
-              if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk, bookingType));
-            });
-          } else {
-            const actualCount = subType === "BOX" ? bCountVal : countVal;
-            if (actualCount > 0) newEntries.push(createEntry(number, actualCount, subType, undefined, bookingType));
-          }
-        }
-
-        setBookingDetails((prev) => [...newEntries, ...prev]);
-        clearInputs();
         return;
       }
 
@@ -1123,8 +1124,8 @@ const BookingScreen: React.FC = () => {
         return ok1 && ok2;
       }
 
-      // Helper: For SET subtype and 3-digit, push all perms as SUPER
-      function pushSetBookings(number: string, count: number) {
+      // Helper: For SET subtype and 3-digit, push all perms with given subType (SUPER, BOX, or BOTH)
+      function pushSetBookings(number: string, count: number, perEntrySubType?: string) {
         if (number.length === 3) {
           const perms = Array.from(new Set([
             number[0] + number[1] + number[2],
@@ -1135,8 +1136,15 @@ const BookingScreen: React.FC = () => {
             number[2] + number[1] + number[0],
           ]));
           let anyOk = false;
+          const st = (perEntrySubType || "SUPER").toUpperCase();
           for (let perm of perms) {
-            if (pushBooking(perm, count, "SUPER")) anyOk = true;
+            if (st === "BOTH") {
+              let ok1 = pushBooking(perm, count, "SUPER");
+              let ok2 = pushBooking(perm, count, "BOX");
+              if (ok1 || ok2) anyOk = true;
+            } else {
+              if (pushBooking(perm, count, st)) anyOk = true;
+            }
           }
           return anyOk;
         }
@@ -1181,6 +1189,8 @@ const BookingScreen: React.FC = () => {
       // 17. "709-5,077-6,078-5,..." 
       const multiBookingLineRegex = /(\d{1,3})\s*[-=+\*\/\.\#\&:,]\s*(\d+)/g;
 
+      // --- Set 524.5 box / Set 524 5 both style ---
+      const setWordNumberCountSubtype = /^\s*Set\s+(\d{3})[\.\-\s]+(\d+)\s+([A-Za-z]+)\s*$/i;
       // --- Set 524.1 style ---
       const setWordNumberDotCount = /^\s*Set\s+(\d{3})\.(\d+)\s*$/i;
       // --- "770,,1" style ---
@@ -1210,6 +1220,8 @@ const BookingScreen: React.FC = () => {
       const numberCountSubtypeFlexible = /^\s*(\d{1,3})\s*([=+\-:\/\.,\s]+)\s*(\d+)\s*([=+\-:\/\.,\s]+)\s*([A-Za-z]+)\s*$/i;
       // also allow 123 5 set
       const numberCountSubtypeSpaces = /^\s*(\d{1,3})\s+(\d+)\s+([A-Za-z]+)\s*$/i;
+      // 123 5 set box / 123 5 set both (number count "set" subtype)
+      const numberCountSetSubtype = /^\s*(\d{3})\s*[=+\-:\/\.,\s]+\s*(\d+)\s+set\s+([A-Za-z]+)\s*$/i;
 
       for (const origLine of lines) {
         let line = origLine;
@@ -1231,9 +1243,20 @@ const BookingScreen: React.FC = () => {
         // 0. Ignore lines like "Dear 6", "Kerala 3"
         if (ignoreLineRegex.test(line)) continue;
 
+        // ---- 0. "123 5 set box" / "123-5 set both" style (SET + per-entry subtype) ----
+        let m = null;
+        m = line.match(numberCountSetSubtype);
+        if (m && m[1] && m[2] && m[3]) {
+          const st = (m[3] || "").toUpperCase();
+          if (!pushSetBookings(m[1], m[2] as any, st)) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
         // ---- 1. YOUR NEW REQUEST: bc:43:15, AB,15,10, ac:14=10 style ----
         // Try the most-flexible: subtype:number:count (colons, commas, spaces, dots), eg. "bc:43:15", "AB,15,10"
-        let m = null;
 
         // bc:43:15 or ac:14=10 or AB,15,10
         m = line.match(subtypeNumberCountFlexible);
@@ -1339,6 +1362,19 @@ const BookingScreen: React.FC = () => {
         if (m) {
           let ok = pushBooking(m[1], m[2] as any, "A") && pushBooking(m[1], m[2] as any, "B") && pushBooking(m[1], m[2] as any, "C");
           if (!ok) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // --- Set 524.5 box / Set 524 5 both style ---
+        m = line.match(setWordNumberCountSubtype);
+        if (m) {
+          const num = m[1];
+          const count = m[2];
+          const st = (m[3] || "").toUpperCase();
+          if (!pushSetBookings(num, count, st)) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
