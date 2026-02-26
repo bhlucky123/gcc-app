@@ -2,7 +2,7 @@ name: Build Android APKs
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -19,9 +19,9 @@ jobs:
         run: |
           MSG=$(echo "${{ github.event.head_commit.message }}" | tr '[:upper:]' '[:lower:]')
 
-          ADMIN='{"user_type":"ADMIN","slug":"admin","scheme":"admin","package":"com.luckybh.admin","icon":"admin-appicon.png"}'
-          DEALER='{"user_type":"DEALER","slug":"dealer","scheme":"dealer","package":"com.luckybh.dealer","icon":"dealer-appicon.png"}'
-          AGENT='{"user_type":"AGENT","slug":"agent","scheme":"agent","package":"com.luckybh.agent","icon":"agent-appicon.png"}'
+          ADMIN='{"user_type":"ADMIN","slug":"gcc-admin","scheme":"gcc-admin","package":"com.luckybh.gcc.admin","icon":"admin-appicon.png"}'
+          DEALER='{"user_type":"DEALER","slug":"gcc-dealer","scheme":"gcc-dealer","package":"com.luckybh.gcc.dealer","icon":"dealer-appicon.png"}'
+          AGENT='{"user_type":"AGENT","slug":"gcc-agent","scheme":"gcc-agent","package":"com.luckybh.gcc.agent","icon":"agent-appicon.png"}'
 
           HAS_ADMIN=$(echo "$MSG" | grep -c "#admin" || true)
           HAS_DEALER=$(echo "$MSG" | grep -c "#dealer" || true)
