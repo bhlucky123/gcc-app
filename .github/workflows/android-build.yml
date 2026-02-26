@@ -92,7 +92,7 @@ jobs:
         run: |
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
           LOWER_TYPE=$(echo "${{ matrix.user_type }}" | tr '[:upper:]' '[:lower:]')
-          cp "$APK_PATH" "${LOWER_TYPE}-app.apk"
+          cp "$APK_PATH" "new-${LOWER_TYPE}-app.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
