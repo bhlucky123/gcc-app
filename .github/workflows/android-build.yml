@@ -132,21 +132,28 @@ jobs:
         id: list-apks
         run: |
           APK_ROWS=""
-          COPY_ALL=""
+          COPY_ALL_HTML=""
+          COPY_ALL_RAW=""
+          ATTACH_PATHS=""
           for f in apks/*.apk; do
             name=$(basename "$f")
             label=$(echo "$name" | sed 's/-[0-9]\{8\}-[0-9]\{6\}\.apk//')
             url="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${name}"
-            COPY_LINE="${label} : ${url}"
-            COPY_ALL="${COPY_ALL}${COPY_LINE}&#10;"
+            COPY_ALL_HTML="${COPY_ALL_HTML}${label} : ${url}&#10;"
+            COPY_ALL_RAW="${COPY_ALL_RAW}${label} : ${url}"$'\n'
+            [ -n "$ATTACH_PATHS" ] && ATTACH_PATHS="${ATTACH_PATHS},"
+            ATTACH_PATHS="${ATTACH_PATHS}${f}"
             APK_ROWS="${APK_ROWS}<tr>"
             APK_ROWS="${APK_ROWS}<td style='padding:12px 16px;font-weight:600;color:#1a1a2e;font-size:14px;white-space:nowrap;'>${label}</td>"
             APK_ROWS="${APK_ROWS}<td style='padding:12px 16px;'><a href='${url}' style='color:#4361ee;text-decoration:none;font-size:14px;'>Download</a></td>"
             APK_ROWS="${APK_ROWS}<td style='padding:12px 8px;text-align:center;'><a href='${url}' style='display:inline-block;padding:6px 14px;background:#4361ee;color:#ffffff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;'>Copy Link</a></td>"
             APK_ROWS="${APK_ROWS}</tr>"
           done
+          MAILTO_BODY=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read().strip()))" <<< "$COPY_ALL_RAW")
           echo "apk_rows=${APK_ROWS}" >> $GITHUB_OUTPUT
-          echo "copy_all=${COPY_ALL}" >> $GITHUB_OUTPUT
+          echo "copy_all=${COPY_ALL_HTML}" >> $GITHUB_OUTPUT
+          echo "mailto_body=${MAILTO_BODY}" >> $GITHUB_OUTPUT
+          echo "attach_paths=${ATTACH_PATHS}" >> $GITHUB_OUTPUT
 
       - name: Create Release with APKs
         uses: softprops/action-gh-release@v2
@@ -169,6 +176,7 @@ jobs:
           subject: "Build Ready - GCC Apps"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
+          attachments: ${{ steps.list-apks.outputs.attach_paths }}
           html_body: |
             <!DOCTYPE html>
             <html>
@@ -185,9 +193,22 @@ jobs:
                       </td>
                     </tr>
 
+                    <!-- Attachment Notice -->
+                    <tr>
+                      <td style="padding:20px 40px 0;">
+                        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;">
+                          <tr>
+                            <td style="padding:14px 20px;font-size:13px;color:#065f46;line-height:1.5;">
+                              <strong>APK files are attached to this email.</strong> Download directly from the attachments below — no GitHub account needed.
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
                     <!-- Build Info -->
                     <tr>
-                      <td style="padding:24px 40px 0;">
+                      <td style="padding:20px 40px 0;">
                         <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f9fb;border-radius:8px;padding:16px 20px;">
                           <tr>
                             <td style="padding:4px 0;font-size:13px;color:#6b7280;">Branch</td>
@@ -228,20 +249,24 @@ jobs:
                       </td>
                     </tr>
 
-                    <!-- Copy All Section -->
+                    <!-- Copy All Links Section -->
                     <tr>
                       <td style="padding:24px 40px 0;">
-                        <h2 style="margin:0 0 12px;font-size:16px;color:#1a1a2e;">Copy All Links</h2>
+                        <h2 style="margin:0 0 12px;font-size:16px;color:#1a1a2e;">All Links</h2>
                         <div style="background-color:#1a1a2e;border-radius:8px;padding:16px 20px;font-family:'Courier New',monospace;font-size:13px;color:#e2e8f0;line-height:1.8;white-space:pre-wrap;word-break:break-all;">${{ steps.list-apks.outputs.copy_all }}</div>
-                        <p style="margin:8px 0 0;font-size:11px;color:#9ca3af;">Select the text above and copy</p>
+                        <p style="margin:8px 0 0;font-size:11px;color:#9ca3af;">Select the text above to copy manually</p>
                       </td>
                     </tr>
 
-                    <!-- Release Page Button -->
+                    <!-- Forward All Links + Release Page Buttons -->
                     <tr>
                       <td style="padding:28px 40px;text-align:center;">
+                        <a href="mailto:?subject=GCC%20App%20Download%20Links%20-%20${{ env.RELEASE_TAG }}&body=${{ steps.list-apks.outputs.mailto_body }}"
+                           style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#4361ee,#3a0ca3);color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-right:12px;">
+                          Forward All Links
+                        </a>
                         <a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}"
-                           style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#4361ee,#3a0ca3);color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
+                           style="display:inline-block;padding:12px 32px;background:#ffffff;color:#4361ee;border:2px solid #4361ee;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
                           View Release Page
                         </a>
                       </td>
