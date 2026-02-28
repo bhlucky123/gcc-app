@@ -1,14 +1,17 @@
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Calendar, PieChart, TrendingUp, Wallet } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
+import { BarChart3, Calendar, PieChart, TrendingUp, Wallet, X } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -62,6 +65,410 @@ type DashboardResponse = {
 
 const DAY_OPTIONS = [7, 15, 30];
 
+type DealerBalance = {
+  id: number;
+  name: string;
+  balance_amount: number;
+};
+
+type DealerBalanceResponse = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: DealerBalance[];
+  total_pending_amount: number;
+};
+
+type DealerPendingModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  initialDateRangeMode: "days" | "custom";
+  initialDays: number;
+  initialStartDate: Date;
+  initialEndDate: Date;
+};
+
+const LIMIT = 10;
+
+function DealerPendingModal({
+  visible,
+  onClose,
+  initialDateRangeMode,
+  initialDays,
+  initialStartDate,
+  initialEndDate,
+}: DealerPendingModalProps) {
+  const [dateRangeMode, setDateRangeMode] = useState<"days" | "custom">(initialDateRangeMode);
+  const [days, setDays] = useState(initialDays);
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [endDate, setEndDate] = useState(initialEndDate);
+  const [showDatePicker, setShowDatePicker] = useState<"from" | "to" | null>(null);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const [allData, setAllData] = useState<DealerBalance[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPending, setTotalPending] = useState<number | null>(null);
+  const [next, setNext] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (visible) {
+      setDateRangeMode(initialDateRangeMode);
+      setDays(initialDays);
+      setStartDate(initialStartDate);
+      setEndDate(initialEndDate);
+      setSearchInput("");
+      setSearch("");
+    }
+  }, [visible, initialDateRangeMode, initialDays, initialStartDate, initialEndDate]);
+
+  // Debounce search
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    // @ts-expect-error type-off
+    searchTimeout.current = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
+  }, [searchInput]);
+
+  const buildDateParams = useCallback(() => {
+    if (dateRangeMode === "custom") {
+      return { start_date: formatDateYYYYMMDD(startDate), end_date: formatDateYYYYMMDD(endDate) };
+    }
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    return { start_date: formatDateYYYYMMDD(start), end_date: formatDateYYYYMMDD(end) };
+  }, [dateRangeMode, startDate, endDate, days]);
+
+  const fetchPage = useCallback(async (offsetVal: number) => {
+    const dateParams = buildDateParams();
+    const params: Record<string, any> = {
+      ...dateParams,
+      limit: LIMIT,
+      offset: offsetVal,
+    };
+    if (search) params.search = search;
+
+    const query = Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== null && v !== "")
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("&");
+
+    const res = await api.get(`/draw-payment/dealers-with-pending-balance/?${query}`);
+    return res.data as DealerBalanceResponse;
+  }, [buildDateParams, search]);
+
+  // Fetch on search/date changes
+  useEffect(() => {
+    if (!visible) return;
+    let ignore = false;
+    setLoading(true);
+    setAllData([]);
+    setOffset(0);
+    (async () => {
+      try {
+        const data = await fetchPage(0);
+        if (ignore) return;
+        setAllData(data.results);
+        setTotalCount(data.count);
+        setTotalPending(data.total_pending_amount);
+        setNext(data.next);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [visible, search, dateRangeMode, days, startDate, endDate, fetchPage]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !next) return;
+    setLoadingMore(true);
+    try {
+      const nextOffset = offset + LIMIT;
+      const data = await fetchPage(nextOffset);
+      setAllData(prev => {
+        const all = [...prev, ...(data?.results || [])];
+        const idSet = new Set<number>();
+        const deduped: DealerBalance[] = [];
+        for (const item of all) {
+          if (!idSet.has(item.id)) {
+            idSet.add(item.id);
+            deduped.push(item);
+          }
+        }
+        return deduped;
+      });
+      setOffset(nextOffset);
+      setTotalCount(data.count);
+      setNext(data.next);
+    } catch { }
+    setLoadingMore(false);
+  }, [loadingMore, next, offset, fetchPage]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const data = await fetchPage(0);
+      setAllData(data.results);
+      setOffset(0);
+      setTotalCount(data.count);
+      setTotalPending(data.total_pending_amount);
+      setNext(data.next);
+    } catch { }
+    setRefreshing(false);
+  };
+
+  const onDateChange = useCallback(
+    (event: { type: string }, selectedDate?: Date) => {
+      setShowDatePicker(null);
+      if (event.type !== "set" || !selectedDate) return;
+      if (showDatePicker === "from") {
+        setStartDate(selectedDate);
+        if (selectedDate > endDate) setEndDate(selectedDate);
+      } else if (showDatePicker === "to") {
+        setEndDate(selectedDate);
+        if (selectedDate < startDate) setStartDate(selectedDate);
+      }
+    },
+    [showDatePicker, startDate, endDate]
+  );
+
+  const renderItem = ({ item }: { item: DealerBalance }) => (
+    <View
+      style={{
+        backgroundColor: "#f8fafc",
+        borderRadius: 12,
+        padding: 16,
+        marginVertical: 6,
+        marginHorizontal: 16,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        borderWidth: 1,
+        borderColor: "#e2e8f0",
+      }}
+    >
+      <Text style={{ fontWeight: "600", fontSize: 15, color: "#1e293b", flex: 1 }}>
+        {item.name}
+      </Text>
+      <Text style={{ fontWeight: "bold", fontSize: 15, color: "#047857" }}>
+        ₹{item.balance_amount?.toLocaleString("en-IN") ?? "0"}
+      </Text>
+    </View>
+  );
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View className="flex-1 bg-white" style={{ paddingTop: Platform.OS === "android" ? 40 : 0 }}>
+        {/* Header */}
+        <View className="px-4 py-3 flex-row items-center justify-between border-b border-gray-200">
+          <View className="flex-1">
+            <Text className="text-lg font-bold text-gray-900">Dealer Pending Balance</Text>
+            {totalPending != null && (
+              <Text className="text-sm font-semibold text-emerald-700 mt-0.5">
+                Total: ₹{totalPending.toLocaleString("en-IN")}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity onPress={onClose} activeOpacity={0.7} className="w-9 h-9 rounded-full bg-gray-100 items-center justify-center">
+            <X size={18} color="#64748b" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Date filter */}
+        <View className="px-4 py-3">
+          <View
+            className="flex-row flex-wrap gap-2 p-1 rounded-xl"
+            style={{ backgroundColor: "#f1f5f9" }}
+          >
+            {DAY_OPTIONS.map((option) => {
+              const active = dateRangeMode === "days" && option === days;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  onPress={() => { setDateRangeMode("days"); setDays(option); }}
+                  className="flex-1 min-w-[60px]"
+                  activeOpacity={0.75}
+                >
+                  <View
+                    className="py-2 rounded-lg items-center"
+                    style={{
+                      backgroundColor: active ? "#4f46e5" : "transparent",
+                    }}
+                  >
+                    <Text className={`text-xs font-bold ${active ? "text-white" : "text-gray-600"}`}>
+                      {option}D
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              onPress={() => setDateRangeMode("custom")}
+              className="flex-1 min-w-[60px]"
+              activeOpacity={0.75}
+            >
+              <View
+                className="py-2 rounded-lg flex-row items-center justify-center gap-1"
+                style={{ backgroundColor: dateRangeMode === "custom" ? "#4f46e5" : "transparent" }}
+              >
+                <Calendar size={12} color={dateRangeMode === "custom" ? "#fff" : "#64748b"} />
+                <Text className={`text-xs font-bold ${dateRangeMode === "custom" ? "text-white" : "text-gray-600"}`}>
+                  Custom
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {dateRangeMode === "custom" && (
+            <View className="mt-2 flex-row items-center gap-2">
+              <TouchableOpacity
+                onPress={() => setShowDatePicker("from")}
+                className="flex-1 rounded-xl px-3 py-2.5 flex-row items-center gap-2"
+                style={{
+                  backgroundColor: "#fff",
+                  borderWidth: 1,
+                  borderColor: showDatePicker === "from" ? "#6366f1" : "#e2e8f0",
+                }}
+                activeOpacity={0.8}
+              >
+                <Calendar size={14} color="#4f46e5" />
+                <View>
+                  <Text className="text-[10px] font-semibold text-gray-500">From</Text>
+                  <Text className="text-sm font-bold text-gray-900">{formatDateDDMMYYYY(startDate)}</Text>
+                </View>
+              </TouchableOpacity>
+              <View className="w-4 items-center">
+                <View className="w-3 h-0.5 rounded-full" style={{ backgroundColor: "#c7d2fe" }} />
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowDatePicker("to")}
+                className="flex-1 rounded-xl px-3 py-2.5 flex-row items-center gap-2"
+                style={{
+                  backgroundColor: "#fff",
+                  borderWidth: 1,
+                  borderColor: showDatePicker === "to" ? "#6366f1" : "#e2e8f0",
+                }}
+                activeOpacity={0.8}
+              >
+                <Calendar size={14} color="#4f46e5" />
+                <View>
+                  <Text className="text-[10px] font-semibold text-gray-500">To</Text>
+                  <Text className="text-sm font-bold text-gray-900">{formatDateDDMMYYYY(endDate)}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {showDatePicker != null && (
+            <View className="mt-2">
+              <DateTimePicker
+                value={showDatePicker === "from" ? startDate : endDate}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={onDateChange}
+                maximumDate={showDatePicker === "from" ? endDate : new Date()}
+                minimumDate={showDatePicker === "to" ? startDate : undefined}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Search */}
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginBottom: 8,
+            borderRadius: 10,
+            backgroundColor: "#f3f4f6",
+            flexDirection: "row",
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: "#e2e8f0",
+            paddingHorizontal: 12,
+          }}
+        >
+          <TextInput
+            placeholder="Search dealer..."
+            value={searchInput}
+            onChangeText={setSearchInput}
+            style={{ flex: 1, height: 42, color: "#1e293b", fontSize: 15 }}
+            placeholderTextColor="#94a3b8"
+            returnKeyType="search"
+            autoCorrect={false}
+          />
+          {!!searchInput && (
+            <TouchableOpacity onPress={() => setSearchInput("")} style={{ paddingHorizontal: 8, height: 42, justifyContent: "center" }}>
+              <Text style={{ fontSize: 20, color: "#64748b" }}>×</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* List */}
+        {loading ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator size="large" color="#4f46e5" />
+          </View>
+        ) : (
+          <FlatList
+            data={allData}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingBottom: 32, flexGrow: 1 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={["#4f46e5"]}
+                tintColor="#4f46e5"
+              />
+            }
+            ListEmptyComponent={
+              <View className="flex-1 items-center justify-center mt-10">
+                <Text className="text-gray-400 text-sm">No dealers with pending balance.</Text>
+              </View>
+            }
+            ListFooterComponent={
+              allData.length < totalCount && !!next ? (
+                <View style={{ alignItems: "center", marginVertical: 12 }}>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: "#4f46e5",
+                      borderRadius: 8,
+                      paddingHorizontal: 24,
+                      paddingVertical: 12,
+                      minWidth: 120,
+                      alignItems: "center",
+                      opacity: loadingMore ? 0.7 : 1,
+                    }}
+                    onPress={handleLoadMore}
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>
+                        Load More
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : null
+            }
+          />
+        )}
+      </View>
+    </Modal>
+  );
+}
+
 const getDefaultCustomDates = () => {
   const today = new Date();
   const sevenDaysAgo = new Date(today);
@@ -77,6 +484,7 @@ export default function AdminDashboard() {
   const [endDate, setEndDate] = useState<Date>(defaultEnd);
   const [showDatePicker, setShowDatePicker] = useState<"from" | "to" | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showDealerList, setShowDealerList] = useState(false);
 
   const apiParams = useMemo(() => {
     if (dateRangeMode === "custom") {
@@ -190,7 +598,11 @@ export default function AdminDashboard() {
 
         {/* Dealer pending summary (top) */}
         {summary?.total_dealer_pending != null && (
-          <View className="px-4 mt-1 mb-1">
+          <TouchableOpacity
+            className="px-4 mt-1 mb-1"
+            activeOpacity={0.7}
+            onPress={() => setShowDealerList(true)}
+          >
             <View
               className="rounded-2xl px-4 py-3 flex-row items-center justify-between"
               style={{
@@ -211,16 +623,12 @@ export default function AdminDashboard() {
                 <Text className="text-xl font-extrabold text-emerald-900">
                   {formatAmount(summary.total_dealer_pending)}
                 </Text>
-                {/* <Text className="text-[10px] text-emerald-600 mt-1">
-                  Paid: {formatAmount(summary.total_paid_amount)} · Received:{" "}
-                  {formatAmount(summary.total_received_amount)}
-                </Text> */}
               </View>
               <View className="w-10 h-10 rounded-full bg-emerald-100 items-center justify-center">
                 <Wallet size={18} color="#047857" />
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Date range filter */}
@@ -278,9 +686,8 @@ export default function AdminDashboard() {
                         }}
                       >
                         <Text
-                          className={`text-xs font-bold ${
-                            active ? "text-white" : "text-gray-600"
-                          }`}
+                          className={`text-xs font-bold ${active ? "text-white" : "text-gray-600"
+                            }`}
                         >
                           {option} days
                         </Text>
@@ -306,9 +713,8 @@ export default function AdminDashboard() {
                   >
                     <Calendar size={13} color={dateRangeMode === "custom" ? "#fff" : "#64748b"} />
                     <Text
-                      className={`text-xs font-bold ${
-                        dateRangeMode === "custom" ? "text-white" : "text-gray-600"
-                      }`}
+                      className={`text-xs font-bold ${dateRangeMode === "custom" ? "text-white" : "text-gray-600"
+                        }`}
                     >
                       Custom
                     </Text>
@@ -576,6 +982,15 @@ export default function AdminDashboard() {
           </>
         )}
       </ScrollView>
+
+      <DealerPendingModal
+        visible={showDealerList}
+        onClose={() => setShowDealerList(false)}
+        initialDateRangeMode={dateRangeMode}
+        initialDays={days}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+      />
     </View>
   );
 }

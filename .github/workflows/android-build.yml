@@ -131,13 +131,22 @@ jobs:
       - name: List built APKs
         id: list-apks
         run: |
-          APKS=""
+          APK_ROWS=""
+          COPY_ALL=""
           for f in apks/*.apk; do
             name=$(basename "$f")
+            label=$(echo "$name" | sed 's/-[0-9]\{8\}-[0-9]\{6\}\.apk//')
             url="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${name}"
-            APKS="${APKS}<li><a href='${url}'>${name}</a></li>"
+            COPY_LINE="${label} : ${url}"
+            COPY_ALL="${COPY_ALL}${COPY_LINE}&#10;"
+            APK_ROWS="${APK_ROWS}<tr>"
+            APK_ROWS="${APK_ROWS}<td style='padding:12px 16px;font-weight:600;color:#1a1a2e;font-size:14px;white-space:nowrap;'>${label}</td>"
+            APK_ROWS="${APK_ROWS}<td style='padding:12px 16px;'><a href='${url}' style='color:#4361ee;text-decoration:none;font-size:14px;'>Download</a></td>"
+            APK_ROWS="${APK_ROWS}<td style='padding:12px 8px;text-align:center;'><a href='${url}' style='display:inline-block;padding:6px 14px;background:#4361ee;color:#ffffff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;'>Copy Link</a></td>"
+            APK_ROWS="${APK_ROWS}</tr>"
           done
-          echo "apk_links=$APKS" >> $GITHUB_OUTPUT
+          echo "apk_rows=${APK_ROWS}" >> $GITHUB_OUTPUT
+          echo "copy_all=${COPY_ALL}" >> $GITHUB_OUTPUT
 
       - name: Create Release with APKs
         uses: softprops/action-gh-release@v2
@@ -157,15 +166,88 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "Android Build Complete - APKs Ready"
+          subject: "Build Ready - GCC Apps"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
           html_body: |
-            <h2>Android Build Successful</h2>
-            <p>
-              <strong>Branch:</strong> ${{ github.ref_name }}<br>
-              <strong>Author:</strong> ${{ github.actor }}
-            </p>
-            <h3>Download APKs:</h3>
-            <ul>${{ steps.list-apks.outputs.apk_links }}</ul>
-            <p><a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}">View Release Page</a></p>
+            <!DOCTYPE html>
+            <html>
+            <body style="margin:0;padding:0;background-color:#f0f2f5;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f2f5;padding:32px 0;">
+                <tr><td align="center">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+                    <!-- Header -->
+                    <tr>
+                      <td style="background:linear-gradient(135deg,#4361ee,#3a0ca3);padding:32px 40px;text-align:center;">
+                        <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">Build Successful</h1>
+                        <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">Your Android APKs are ready to download</p>
+                      </td>
+                    </tr>
+
+                    <!-- Build Info -->
+                    <tr>
+                      <td style="padding:24px 40px 0;">
+                        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f9fb;border-radius:8px;padding:16px 20px;">
+                          <tr>
+                            <td style="padding:4px 0;font-size:13px;color:#6b7280;">Branch</td>
+                            <td style="padding:4px 0;font-size:13px;color:#1a1a2e;font-weight:600;text-align:right;">${{ github.ref_name }}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding:4px 0;font-size:13px;color:#6b7280;">Author</td>
+                            <td style="padding:4px 0;font-size:13px;color:#1a1a2e;font-weight:600;text-align:right;">${{ github.actor }}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding:4px 0;font-size:13px;color:#6b7280;">Tag</td>
+                            <td style="padding:4px 0;font-size:13px;color:#1a1a2e;font-weight:600;text-align:right;">${{ env.RELEASE_TAG }}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <!-- APK Downloads -->
+                    <tr>
+                      <td style="padding:24px 40px 0;">
+                        <h2 style="margin:0 0 12px;font-size:16px;color:#1a1a2e;">Download APKs</h2>
+                        <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                          <tr style="background-color:#f8f9fb;">
+                            <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;">App</th>
+                            <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;">Link</th>
+                            <th style="padding:10px 8px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;">Action</th>
+                          </tr>
+                          ${{ steps.list-apks.outputs.apk_rows }}
+                        </table>
+                      </td>
+                    </tr>
+
+                    <!-- Copy All Section -->
+                    <tr>
+                      <td style="padding:24px 40px 0;">
+                        <h2 style="margin:0 0 12px;font-size:16px;color:#1a1a2e;">Copy All Links</h2>
+                        <div style="background-color:#1a1a2e;border-radius:8px;padding:16px 20px;font-family:'Courier New',monospace;font-size:13px;color:#e2e8f0;line-height:1.8;white-space:pre-wrap;word-break:break-all;">${{ steps.list-apks.outputs.copy_all }}</div>
+                        <p style="margin:8px 0 0;font-size:11px;color:#9ca3af;">Select the text above and copy</p>
+                      </td>
+                    </tr>
+
+                    <!-- Release Page Button -->
+                    <tr>
+                      <td style="padding:28px 40px;text-align:center;">
+                        <a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}"
+                           style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#4361ee,#3a0ca3);color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
+                          View Release Page
+                        </a>
+                      </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                      <td style="padding:20px 40px;background-color:#f8f9fb;text-align:center;border-top:1px solid #e5e7eb;">
+                        <p style="margin:0;font-size:12px;color:#9ca3af;">Automated build from <strong>GCC App</strong> CI/CD Pipeline</p>
+                      </td>
+                    </tr>
+
+                  </table>
+                </td></tr>
+              </table>
+            </body>
+            </html>

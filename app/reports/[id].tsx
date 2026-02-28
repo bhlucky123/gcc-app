@@ -1,44 +1,84 @@
 import { useAuthStore } from '@/store/auth';
 import api from '@/utils/axios';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from "expo-router";
 import { useState } from 'react';
-import { ActivityIndicator, Clipboard, SafeAreaView, ScrollView, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Clipboard, Platform, SafeAreaView, ScrollView, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
-const fmt = (val: number | null | undefined) => {
-  if (val == null) return '';
+const fmt = (val: number | string | null | undefined) => {
+  if (val == null || val === '') return '';
   const n = Number(val);
   if (isNaN(n)) return '';
   return n.toLocaleString('en-IN');
 };
 
+const formatDateYMD = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const formatDateDisplay = (d: Date) => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+};
+
 const Report = () => {
   const local = useLocalSearchParams();
   const [copied, setCopied] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Ensure agentId is always a string
   const id = Array.isArray(local?.id)
     ? local.id[0] || ""
     : local?.id || "";
 
   const { user } = useAuthStore();
 
-
   const {
     data,
     isLoading,
     error,
-    refetch,
     isFetching,
   } = useQuery({
-    queryKey: ["sales-report"],
+    queryKey: ["sales-report", id, formatDateYMD(selectedDate)],
     queryFn: async () => {
-      const res = await api.post("/draw-result/sales-report-api/", { dealer_id: id });
+      const body: any = { dealer_id: id };
+      body.date = formatDateYMD(selectedDate);
+      const res = await api.post("/draw-result/sales-report-api/", body);
       return res.data;
     },
+    enabled: !!id,
   });
 
-  if (isLoading) {
+  const onDateChange = (_event: any, date?: Date) => {
+    setShowDatePicker(false);
+    if (date) {
+      setSelectedDate(date);
+    }
+  };
+
+  const goToPrevDay = () => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() - 1);
+    setSelectedDate(d);
+  };
+
+  const goToNextDay = () => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + 1);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (d <= today) {
+      setSelectedDate(d);
+    }
+  };
+
+  const isToday = formatDateYMD(selectedDate) === formatDateYMD(new Date());
+
+  if (isLoading && !data) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#2563eb" />
@@ -47,7 +87,7 @@ const Report = () => {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center">
         <Text className="text-red-600 font-bold">Failed to load report.</Text>
@@ -66,11 +106,9 @@ const Report = () => {
   const buildCopyText = () => {
     let text = '';
 
-    // Header
     text += `📊 DAILY SALES REPORT – ${date_display || ''}\n\n`;
     text += `👤 Name: ${dealer_name || ''}\n\n`;
 
-    // Sales details
     text += `🕒 Sales Details:\n\n`;
     text += `Time   | Sell         | Price \n`;
     text += `------------------------------------\n`;
@@ -83,7 +121,6 @@ const Report = () => {
       }
     }
 
-    // Summary
     text += `\n📌 Summary:\n\n`;
     text += `Total Sell: ${fmt(summary?.total_sell)}\n\n`;
     text += `Total Prize: ${fmt(summary?.total_price)}\n\n`;
@@ -94,7 +131,6 @@ const Report = () => {
     text += `Paid Amount: ${fmt(summary?.paid_amount)}\n\n`;
     text += `Total Balance: ${fmt(summary?.total_balance)}\n\n`;
 
-    // Bank details
     text += `------------------------------------\n`;
     if (admin_bank_account_details) {
       text += `${admin_bank_account_details}\n`;
@@ -113,20 +149,74 @@ const Report = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <ScrollView className="flex-1 px-4 py-6">
-        <View className="mb-6">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-2xl font-bold text-gray-800">Sales Report</Text>
-            <TouchableOpacity
-              onPress={handleCopy}
-              activeOpacity={0.8}
-              className={`px-5 py-2.5 rounded-lg ${copied ? 'bg-green-500' : 'bg-blue-600'}`}
-            >
-              <Text className="text-white font-bold text-sm">
-                {copied ? 'Copied!' : 'Copy'}
-              </Text>
-            </TouchableOpacity>
+      <ScrollView className="flex-1 px-4 py-6"
+        style={{ paddingTop: Platform.OS === 'android' ? 40 : 0 }}
+      >
+        {/* Title + Copy */}
+        <View className="flex-row items-center justify-between mb-4">
+          <Text className="text-2xl font-bold text-gray-800">Sales Report</Text>
+          <TouchableOpacity
+            onPress={handleCopy}
+            activeOpacity={0.8}
+            disabled={!data}
+            className={`px-5 py-2.5 rounded-lg ${copied ? 'bg-green-500' : 'bg-blue-600'} ${!data ? 'opacity-50' : ''}`}
+          >
+            <Text className="text-white font-bold text-sm">
+              {copied ? 'Copied!' : 'Copy'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Date picker row */}
+        <View className="flex-row items-center justify-between bg-gray-50 rounded-xl px-2 py-2 mb-4">
+          <TouchableOpacity
+            onPress={goToPrevDay}
+            activeOpacity={0.7}
+            className="bg-white rounded-lg px-4 py-2.5 border border-gray-200"
+          >
+            <Text className="text-lg font-bold text-gray-700">‹</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowDatePicker(true)}
+            activeOpacity={0.8}
+            className="flex-1 mx-3 items-center py-2.5 bg-white rounded-lg border border-gray-200"
+          >
+            <Text className="text-base font-bold text-gray-800">
+              {formatDateDisplay(selectedDate)}
+            </Text>
+            {isToday && <Text className="text-xs text-blue-600 font-semibold">Today</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={goToNextDay}
+            activeOpacity={0.7}
+            disabled={isToday}
+            className={`bg-white rounded-lg px-4 py-2.5 border border-gray-200 ${isToday ? 'opacity-30' : ''}`}
+          >
+            <Text className="text-lg font-bold text-gray-700">›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDateChange}
+            maximumDate={new Date()}
+          />
+        )}
+
+        {/* Loading overlay for date change */}
+        {isFetching && (
+          <View className="items-center py-3 mb-2">
+            <ActivityIndicator size="small" color="#2563eb" />
           </View>
+        )}
+
+        {/* Dealer info */}
+        <View className="mb-4">
           <Text className="text-base text-gray-600">Dealer: <Text className="font-semibold">{dealer_name}</Text></Text>
           <Text className="text-base text-gray-600">Date: <Text className="font-semibold">{date_display}</Text></Text>
         </View>
@@ -136,13 +226,11 @@ const Report = () => {
           <View className="mb-6">
             <Text className="text-lg font-semibold text-gray-700 mb-2">Sales Details</Text>
             <View className="bg-gray-50 rounded-xl overflow-hidden">
-              {/* Table header */}
               <View className="flex-row bg-gray-200 px-4 py-2.5">
                 <Text className="flex-1 text-sm font-bold text-gray-600">Time</Text>
                 <Text className="text-sm font-bold text-gray-600 text-right" style={{ width: 80 }}>Sell</Text>
                 <Text className="text-sm font-bold text-gray-600 text-right" style={{ width: 80 }}>Price</Text>
               </View>
-              {/* Table rows */}
               {sales_details.map((item: any, idx: number) => (
                 <View key={idx} className={`flex-row px-4 py-2.5 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                   <Text className="flex-1 text-sm text-gray-800">{item?.draw_name || item?.name || item?.time || ''}</Text>
@@ -158,6 +246,7 @@ const Report = () => {
           </View>
         )}
 
+        {/* Summary */}
         <View className="mb-6">
           <Text className="text-lg font-semibold text-gray-700 mb-2">Summary</Text>
           <View className="bg-gray-100 rounded-xl p-4 mb-2">
@@ -197,6 +286,8 @@ const Report = () => {
             </View>
           </View>
         </View>
+
+        {/* Bank details */}
         <View className="mb-8">
           <Text className="text-lg font-semibold text-gray-700 mb-2">Admin Bank Account Details</Text>
           <View className="bg-gray-50 rounded-md p-3">
