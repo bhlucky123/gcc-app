@@ -201,6 +201,14 @@ jobs:
                             <td style="padding:4px 0;font-size:13px;color:#6b7280;">Tag</td>
                             <td style="padding:4px 0;font-size:13px;color:#1a1a2e;font-weight:600;text-align:right;">${{ env.RELEASE_TAG }}</td>
                           </tr>
+                          <tr>
+                            <td colspan="2" style="padding:10px 0 0;">
+                              <div style="border-top:1px solid #e5e7eb;padding-top:10px;">
+                                <span style="font-size:13px;color:#6b7280;">Commit Message</span>
+                                <p style="margin:6px 0 0;font-size:13px;color:#1a1a2e;font-weight:600;line-height:1.5;">${{ github.event.head_commit.message }}</p>
+                              </div>
+                            </td>
+                          </tr>
                         </table>
                       </td>
                     </tr>

@@ -178,9 +178,6 @@ export default function RootLayout() {
             headerShown: false,
           }} />
 
-          <Stack.Screen name="report/[id]" options={{
-            headerShown: false,
-          }} />
 
           <Stack.Screen name="top-numbers" options={{
             headerShown: true,
